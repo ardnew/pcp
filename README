@@ -1,0 +1,32 @@
+- REQUIREMENTS
+
+  This software was developed and tested with the default Perl v5.12.4 distribution that ships with Mac OS X 10.8.4. 
+
+  The following Perl modules are required:
+
+    Pod::Usage
+    Getopt::Long
+    Cwd
+    File::Find
+
+  And the following are optional:
+
+    File::Spec
+    Term::ReadKey
+
+  You can obtain all of these modules from CPAN at http://www.cpan.org/.
+
+- INSTALLATION
+
+  No installation is required. 
+
+- USAGE
+
+  You can view available options by running the script without any arguments:
+
+    $ perl pccp.pl
+
+- CONTACT
+
+  my e-mail address is andrew@ardnew.com
+
