@@ -1,0 +1,63 @@
+============================================================
+                                               REQUIREMENTS
+============================================================
+
+This software was developed and tested with Perl v5.12.4 on 
+Mac OS X 10.8.4, but any version of Perl 5 will work.
+
+The following Perl modules are required:
+
+  Pod::Usage
+  Getopt::Long
+  Cwd
+  File::Find
+
+And the following are optional:
+
+  File::Spec
+  Term::ReadKey
+
+All of these packages are available for free from the CPAN
+module archive (http://www.cpan.org/).
+
+============================================================
+                                               INSTALLATION
+============================================================
+
+** No installation is necessary. **
+
+(optional) To install the script system-wide for all users,
+you can enable execute permissions and copy the file to a 
+directory in your user's shell PATH:
+
+  > chmod +x pccp-VERSION.pl
+  > cp pccp-VERSION.pl /usr/local/bin
+
+  To see what directories are in your PATH:
+
+    > echo $PATH
+
+  I also recommend renaming the file or creating a symlink
+  when installing the script system-wide:
+
+    > cd /usr/local/bin
+    > mv pccp-VERSION.pl pccp
+
+      - OR -
+    
+    > cd /usr/local/bin
+    > ln -s pccp-VERSION.pl pccp
+
+============================================================
+                                                      USAGE
+============================================================
+
+To view the built-in POD-generated man page:
+
+  > perl pccp-VERSION.pl --manpage
+
+============================================================
+                                                    CONTACT
+============================================================
+
+e-mail: <andrew@ardnew.com>
