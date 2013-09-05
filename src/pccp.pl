@@ -16,12 +16,15 @@ our $DTYPE = 1; # "directory"
 
 ####[ constants ]#########################################################################
 
+my %initload_module = # these modules are needed for bootstrapping other features
+(
+  'Getopt::Long'    => [ qw[] ],
+);
 
 my %required_module =
 (
   'File::Find'      => [ qw[] ],
   'File::Spec'      => [ qw[ rel2abs ] ],
-  'Getopt::Long'    => [ qw[] ],
   'Pod::Usage'      => [ qw[] ],
 );
 
@@ -50,6 +53,11 @@ my %pod =
 
 ####[ forward declarations ]##############################################################
 
+
+#
+# initializes the program by pre-loading some modules and parsing command line options
+#
+sub init;
 
 #
 # print an error message based on numeric error level:
@@ -131,13 +139,13 @@ sub parse_filenames (@);
 ####[ main line ]#########################################################################
 
 
+init;
+
 load_modules 1, \%required_module;
 load_modules 0, \%optional_module;
 
-parse_options \%option;
-
 pod $RETOK, "manpage" if $option{m_manpg};
-pod $RETOK, "usage" if $option{h_usage} or @ARGV < 2;
+pod $RETOK, "usage" if $option{h_usage};# or @ARGV < 2;
 
 my ($target, $fdtype, @source) = parse_filenames reverse @ARGV;
 
@@ -147,22 +155,29 @@ exit $RETOK;
 ####[ subroutines ]#######################################################################
 
 
+sub init
+{
+  print $/;
+  load_modules 1, \%initload_module;
+  parse_options \%option;
+}
+
 sub print_error ($$)
 {
   my ($ret, $msg) = @_;
 
   if ($ret == $RETOK)
   {
-    printf STDERR "%s %s$/", "[ warning ]", $msg;
+    printf STDERR "%s$/  %s$/$/", "warning:", $msg if $option{v_debug};
   }
   elsif ($ret == $RETER)
   {
-    printf STDERR "%s %s$/", "[  error  ]", $msg;
+    printf STDERR "%s$/  %s$/$/", "error:", $msg;
     exit $ret;
   }
   else
   {
-    printf STDERR "[%s] %s$/", $0, $msg;
+    printf STDERR "[%s]$/  %s$/$/", $0, $msg;
   }
 }
 
@@ -176,13 +191,13 @@ sub load_modules ($$)
     {
       foreach (@sym)
       {
-        $msg = "export not found: \"$pkg\:\:$_\"" and last
+        $msg = "export not found: $pkg\:\:$_" and last
           unless eval "$pkg->import('$_'); 1";
       }
     }
     else
     {
-      $msg = "module not found: \"$pkg\"";
+      $msg = "module not found: $pkg";
     }
 
     if (defined $msg)
@@ -203,6 +218,8 @@ sub show_modules ($$)
   (length > $wid) && ($wid = length) for keys %mod;
 
   printf "loaded modules (%s):$/", $req ? "required" : "optional"; 
+  
+  printf "  %${wid}s$/$/", "none" and return unless keys %mod > 0;
 
   while (my ($pkg, @sym) = map { (ref) ? @{$_} : $_ } each %mod)
   {
@@ -237,9 +254,6 @@ sub parse_options ($)
 
   if ($$opt{v_debug} > 1)
   {
-    show_modules 1, \%required_module;
-    show_modules 0, \%optional_module;
-
     printf "command-line options:$/";
 
     while (my ($k, $v) = each %{$opt}) 
@@ -262,6 +276,13 @@ sub pod ($$)
 
 sub parse_filenames (@)
 {
+  if ($option{v_debug} > 1)
+  {
+    show_modules 1, \%initload_module;
+    show_modules 1, \%required_module;
+    show_modules 0, \%optional_module;
+  }
+    
   print_error $RETER, "required source and target files not provided" 
     unless @_ > 1;
 
