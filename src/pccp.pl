@@ -96,11 +96,10 @@ sub load_modules ($$);
 sub parse_options ($);
 
 #
-# runs pod2usage showing the specified sections (see %pod hash definition for options) 
-# and then exits program
+# runs pod2usage showing the specified sections and then exits program
 #
 # arg1: program return code
-# arg2: POD detail level
+# arg2: display sections (see %pod hash definition for options)
 #
 sub pod ($$);
 
