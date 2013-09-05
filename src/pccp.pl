@@ -79,6 +79,15 @@ sub print_error ($$);
 sub load_modules ($$);
 
 #
+# prints the contents of a module hash. if called after sub load_modules ($$), then
+# only the successfully loaded modules will exist and be printed
+#
+# arg1: modules in arg2 are required (no = 0, yes = 1)
+# arg2: hash reference with structure { 'Module::Name' => [ "symbols", "to", "import" ] }
+#
+sub show_modules ($$);
+
+#
 # calls Getopt::Long::GetOptions with reference to above %option hash, and replaces the
 # hash value (the array reference) with the result of GetOptions's parsing
 #
@@ -159,26 +168,47 @@ sub print_error ($$)
 
 sub load_modules ($$)
 {
-  my ($msg, $req, %mod) = (undef, shift, %{(shift)});
+  my ($msg, $req, $mod) = (undef, shift, shift);
 
-  while (my ($mod, @imp) = map { (ref) ? @{$_} : $_ } each %mod)
+  while (my ($pkg, @sym) = map { (ref) ? @{$_} : $_ } each %{$mod})
   {
-    if (eval "require $mod; 1")
+    if (eval "require $pkg; 1")
     {
-      foreach (@imp)
+      foreach (@sym)
       {
-        $msg = "export not found: \"$mod\:\:$_\"" and last
-          unless eval "$mod->import('$_'); 1";
+        $msg = "export not found: \"$pkg\:\:$_\"" and last
+          unless eval "$pkg->import('$_'); 1";
       }
     }
     else
     {
-      $msg = "module not found: \"$mod\"";
+      $msg = "module not found: \"$pkg\"";
     }
 
-    ( sub { print_error $RETOK, shift },
-      sub { print_error $RETER, shift },)[$req]->($msg) if defined $msg;
+    if (defined $msg)
+    {
+      delete $$mod{$pkg} unless $req;
+
+      ( sub { print_error $RETOK, shift },
+        sub { print_error $RETER, shift }, )[$req]->($msg);
+    }
   }
+}
+
+sub show_modules ($$)
+{
+  my ($req, %mod) = (shift, %{(shift)});
+
+  my $wid = 0;
+  (length > $wid) && ($wid = length) for keys %mod;
+
+  printf "loaded modules (%s):$/", $req ? "required" : "optional"; 
+
+  while (my ($pkg, @sym) = map { (ref) ? @{$_} : $_ } each %mod)
+  {
+    printf "  %${wid}s => (%s)$/", $pkg, join ', ', @sym;
+  }
+  print $/;
 }
 
 sub parse_options ($)
@@ -207,7 +237,11 @@ sub parse_options ($)
 
   if ($$opt{v_debug} > 1)
   {
+    show_modules 1, \%required_module;
+    show_modules 0, \%optional_module;
+
     printf "command-line options:$/";
+
     while (my ($k, $v) = each %{$opt}) 
     { 
       printf "%9s = %-s$/", $k, $v; 
