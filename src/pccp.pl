@@ -10,8 +10,8 @@ use warnings;
 our $RETOK = 0; # return value: no errors
 our $RETER = 1; # return value: error
 
-our $FTYPE = 0;
-our $DTYPE = 1;
+our $FTYPE = 0; # "file"
+our $DTYPE = 1; # "directory"
 
 
 ####[ constants ]#########################################################################
@@ -53,11 +53,26 @@ my %pod =
 
 
 #
-# arg1: error level for message to print (and program return code)
-# arg2: message to print to STDOUT/STDERR
+# print an error message based on numeric error level:
+#   
+#   $RETOK: print a warning and continue program execution
+#   $RETER: print an error and exit with error level as program return code
+#
+# arg1: error level for message (and program return code)
+# arg2: message
 #
 sub print_error ($$);
 
+#
+# attempt to import external Perl modules
+#
+#   if the module is required and not found, exit program
+#   if the module is optional and not found, continue program
+#
+# for optional modules not found, the corresponding key is deleted from the module hash
+# to allow the program to check if it was successfully imported or not:
+#
+#   exists $module{'Module::Name'} == module loaded
 #
 # arg1: modules in arg2 are required (no = 0, yes = 1)
 # arg2: hash reference with structure { 'Module::Name' => [ "symbols", "to", "import" ] }
@@ -81,23 +96,24 @@ sub load_modules ($$);
 sub parse_options ($);
 
 #
-# runs pod2usage with the specified level of detail
+# runs pod2usage showing the specified sections (see %pod hash definition for options) 
+# and then exits program
 #
 # arg1: program return code
-# arg2: POD detail level. see %pod hash above for options
+# arg2: POD detail level
 #
 sub pod ($$);
 
 #
-# accepts as input a list of length at least 2. the last element of the list is 
-# interpreted as TARGET, and all preceding elements are SOURCE
+# accepts as input a list of length at least 2. the first element of the list is 
+# interpreted as TARGET, and all succeding elements are SOURCE
 #
 # if more than 1 SOURCE exists, TARGET must be a directory. otherwise, both may be
 # either a file or a directory
 #
 # on success, returns a list whose first element is TARGET, second element is the file 
-# type of TARGET (FTYPE = file, DTYPE = directory), and each following element
-# is the absolute path to a SOURCE. it is guaranteed that all SOURCE and TARGET elements 
+# type of TARGET (FTYPE = file, DTYPE = directory), and each following element is the
+# absolute path to a SOURCE. it is guaranteed that all SOURCE and TARGET elements 
 # are accessible with all necessary permisions on the filesystem.
 #
 # on failure, prints an error message and stops program execution 
@@ -126,7 +142,7 @@ if ($option{v_debug} > 1)
 pod $RETOK, "manpage" if $option{m_manpg};
 pod $RETOK, "usage" if $option{h_usage} or @ARGV < 2;
 
-my ($target, $fdtype, @source) = parse_filenames @ARGV;
+my ($target, $fdtype, @source) = parse_filenames reverse @ARGV;
 
 if ($option{v_debug} > 1)
 {
@@ -148,16 +164,16 @@ sub print_error ($$)
 
   if ($ret == $RETOK)
   {
-    printf STDOUT "%s %s$/", "[ warning ]", $msg;
+    printf STDERR "%s %s$/", "[ warning ]", $msg;
   }
   elsif ($ret == $RETER)
   {
-    printf STDOUT "%s %s$/", "[  error  ]", $msg;
+    printf STDERR "%s %s$/", "[  error  ]", $msg;
     exit $ret;
   }
   else
   {
-    printf STDOUT "[%s] %s$/", $0, $msg;
+    printf STDERR "[%s] %s$/", $0, $msg;
   }
 }
 
@@ -193,7 +209,7 @@ sub parse_options ($)
 
   # override SIGWARN to make Getopt shut up
   {
-    local $SIG{__WARN__} = sub { };
+    local $SIG{__WARN__} = sub { }; do nothing
 
     Getopt::Long::GetOptions
     (
@@ -225,7 +241,7 @@ sub parse_filenames (@)
   print_error $RETER, "required source and target files not provided" 
     unless @_ > 1;
 
-  my ($target, $fdtype, @source, %unique) = pop @_;
+  my ($target, $fdtype, @source, %unique) = shift @_;
 
   foreach (@_)
   {
@@ -255,10 +271,11 @@ sub parse_filenames (@)
   print_error $RETER, "no valid source files provided" 
     unless @source;
 
-  print_error $RETER, "target must be a directory when copying a directory or more than one file" 
+  print_error $RETER, "target must be a directory " .
+                      "when copying a directory or more than one file" 
     if $fdtype == $DTYPE and -f $target;
 
-  return $target, $fdtype, @source;
+  return $target, $fdtype, map { Cwd::realpath($_) } @source;
 }
 
 
