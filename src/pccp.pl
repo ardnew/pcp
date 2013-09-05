@@ -19,15 +19,14 @@ our $DTYPE = 1; # "directory"
 
 my %required_module =
 (
-  'Pod::Usage'      => [ qw[] ],
-  'Getopt::Long'    => [ qw[] ],
-  'Cwd'             => [ qw[ realpath ] ],  
   'File::Find'      => [ qw[] ],
+  'File::Spec'      => [ qw[ rel2abs ] ],
+  'Getopt::Long'    => [ qw[] ],
+  'Pod::Usage'      => [ qw[] ],
 );
 
 my %optional_module =
 (
-  'File::Spec'      => [ qw[] ],
   'Term::ReadKey'   => [ qw[] ],
 );
 
@@ -128,28 +127,10 @@ load_modules 0, \%optional_module;
 
 parse_options \%option;
 
-if ($option{v_debug} > 1)
-{
-  printf "command-line options:$/";
-  while (my ($k, $v) = each %option) 
-  { 
-    printf "%9s = %-s$/", $k, $v; 
-  }
-  printf "%9s = (%-s)$/$/", 'args', join(', ', @ARGV);
-}
-
 pod $RETOK, "manpage" if $option{m_manpg};
 pod $RETOK, "usage" if $option{h_usage} or @ARGV < 2;
 
 my ($target, $fdtype, @source) = parse_filenames reverse @ARGV;
-
-if ($option{v_debug} > 1)
-{
-  printf "source files:$/  %s$/$/", join("$/  ", @source);
-    
-  printf "target %s:$/  %s%s$/$/", 
-    $fdtype ? "directory" : "file", $target, -e $target ? "" : " (new)";
-}
 
 exit $RETOK;
 
@@ -223,6 +204,16 @@ sub parse_options ($)
   }
 
   $$opt{$_} = ${$$opt{$_}}[1] for keys %{$opt};
+
+  if ($$opt{v_debug} > 1)
+  {
+    printf "command-line options:$/";
+    while (my ($k, $v) = each %{$opt}) 
+    { 
+      printf "%9s = %-s$/", $k, $v; 
+    }
+    printf "%9s = (%-s)$/$/", 'args', join(', ', @ARGV);
+  }  
 }
 
 sub pod ($$)
@@ -242,30 +233,32 @@ sub parse_filenames (@)
 
   my ($target, $fdtype, @source, %unique) = shift @_;
 
-  foreach (@_)
+  %unique = map { $_ => undef } @_;
+
+  foreach (keys %unique)
   {
     print_error $RETOK, "no such file or directory: $_" and next 
       unless -e;
 
     if (-f) 
     {    
-      if (-r) { $unique{$_} = undef }
-         else { print_error $RETOK, "cannot read file: $_"; } 
+      print_error $RETOK, "cannot read file: $_" and next
+        unless -r;
     } 
     elsif (-d) 
     { 
-      if (-r) { $unique{$_} = undef }
-         else { print_error $RETOK, "cannot read directory: $_"; } 
+      print_error $RETOK, "cannot read directory: $_" and next
+        unless -r;
     }       
     else 
     { 
-      print_error $RETOK, "unknown file type: $_"; 
+      print_error $RETOK, "unknown file type: $_" and next;
     }
+
+    push @source, $_;
   }
 
-  @source = keys %unique;
-
-  $fdtype = ($FTYPE, $DTYPE)[@_ > 1 || -d $target || (grep { -d } @source) > 0];
+  $fdtype = ($FTYPE, $DTYPE)[@source > 1 || -d $target || (grep { -d } @source) > 0];
 
   print_error $RETER, "no valid source files provided" 
     unless @source;
@@ -274,7 +267,19 @@ sub parse_filenames (@)
                       "when copying a directory or more than one file" 
     if $fdtype == $DTYPE and -f $target;
 
-  return $target, $fdtype, map { Cwd::realpath($_) } @source;
+  # no more error checking below this line
+
+  ($target, @source) = map { File::Spec->rel2abs($_) } $target, @source;
+
+  if ($option{v_debug} > 1)
+  {
+    printf "source files:$/  %s$/$/", join("$/  ", @source);
+      
+    printf "target %s:$/  %s%s$/$/", 
+      $fdtype ? "directory" : "file", $target, -e $target ? "" : " (new)";
+  }
+
+  return $target, $fdtype, @source;
 }
 
 
