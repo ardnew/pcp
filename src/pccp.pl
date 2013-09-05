@@ -208,7 +208,7 @@ sub parse_options ($)
 
   # override SIGWARN to make Getopt shut up
   {
-    local $SIG{__WARN__} = sub { }; do nothing
+    local $SIG{__WARN__} = sub { }; # do nothing
 
     Getopt::Long::GetOptions
     (
