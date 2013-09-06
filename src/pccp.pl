@@ -13,10 +13,14 @@ our $RETER = 1; # return value: error
 our $FTYPE = 0; # "file"
 our $DTYPE = 1; # "directory"
 
+our $OPTMO = 0; # optional module
+our $REQMO = 1; # required module
+
 
 ####[ constants ]#########################################################################
 
-my %initload_module = # these modules are needed for bootstrapping other features
+
+my %bootstrp_module = # these modules are needed for bootstrapping other features
 (
   'Getopt::Long'    => [ qw[] ],
 );
@@ -24,7 +28,7 @@ my %initload_module = # these modules are needed for bootstrapping other feature
 my %required_module =
 (
   'File::Find'      => [ qw[] ],
-  'File::Spec'      => [ qw[ rel2abs ] ],
+  'File::Spec'      => [ qw[ rel2abs realpath ] ],
   'Pod::Usage'      => [ qw[] ],
 );
 
@@ -81,7 +85,7 @@ sub print_error ($$);
 #
 #   exists $module{'Module::Name'} == module loaded
 #
-# arg1: modules in arg2 are required (no = 0, yes = 1)
+# arg1: modules in arg2 are required (no = $OPTMO, yes = $REQMO)
 # arg2: hash reference with structure { 'Module::Name' => [ "symbols", "to", "import" ] }
 #
 sub load_modules ($$);
@@ -90,10 +94,11 @@ sub load_modules ($$);
 # prints the contents of a module hash. if called after sub load_modules ($$), then
 # only the successfully loaded modules will exist and be printed
 #
-# arg1: modules in arg2 are required (no = 0, yes = 1)
-# arg2: hash reference with structure { 'Module::Name' => [ "symbols", "to", "import" ] }
+# arg1: modules in arg2 are required (no = $OPTMO, yes = $REQMO)
+# arg2: name of the module group, use undef for none
+# arg3: hash reference with structure { 'Module::Name' => [ "symbols", "to", "import" ] }
 #
-sub show_modules ($$);
+sub show_modules ($$$);
 
 #
 # calls Getopt::Long::GetOptions with reference to above %option hash, and replaces the
@@ -141,8 +146,8 @@ sub parse_filenames (@);
 
 init;
 
-load_modules 1, \%required_module;
-load_modules 0, \%optional_module;
+load_modules $REQMO, \%required_module;
+load_modules $OPTMO, \%optional_module;
 
 pod $RETOK, "manpage" if $option{m_manpg};
 pod $RETOK, "usage" if $option{h_usage};# or @ARGV < 2;
@@ -157,8 +162,7 @@ exit $RETOK;
 
 sub init
 {
-  print $/;
-  load_modules 1, \%initload_module;
+  load_modules 1, \%bootstrp_module;
   parse_options \%option;
 }
 
@@ -202,28 +206,30 @@ sub load_modules ($$)
 
     if (defined $msg)
     {
-      delete $$mod{$pkg} unless $req;
+      delete $$mod{$pkg} if $req == $OPTMO;
 
       ( sub { print_error $RETOK, shift },
-        sub { print_error $RETER, shift }, )[$req]->($msg);
+        sub { print_error $RETER, shift }, )[$req == $REQMO]->($msg);
     }
   }
 }
 
-sub show_modules ($$)
+sub show_modules ($$$)
 {
-  my ($req, %mod) = (shift, %{(shift)});
+  my ($req, $gid, %mod) = (shift, shift, %{(shift)});
 
   my $wid = 0;
   (length > $wid) && ($wid = length) for keys %mod;
 
-  printf "loaded modules (%s):$/", $req ? "required" : "optional"; 
+  printf "%s %smodules:$/", 
+    $req == $REQMO ? "required" : "optional",
+    defined $gid ? $gid . " " : ""; 
   
   printf "  %${wid}s$/$/", "none" and return unless keys %mod > 0;
 
   while (my ($pkg, @sym) = map { (ref) ? @{$_} : $_ } each %mod)
   {
-    printf "  %${wid}s => (%s)$/", $pkg, join ', ', @sym;
+    printf "  %${wid}s => [%s]$/", $pkg, @sym ? " @sym " : "";
   }
   print $/;
 }
@@ -278,9 +284,9 @@ sub parse_filenames (@)
 {
   if ($option{v_debug} > 1)
   {
-    show_modules 1, \%initload_module;
-    show_modules 1, \%required_module;
-    show_modules 0, \%optional_module;
+    show_modules $REQMO, "bootstrap", \%bootstrp_module;
+    show_modules $REQMO, "feature", \%required_module;
+    show_modules $OPTMO, "feature", \%optional_module;
   }
     
   print_error $RETER, "required source and target files not provided" 
@@ -324,7 +330,9 @@ sub parse_filenames (@)
 
   # no more error checking below this line
 
-  ($target, @source) = map { File::Spec->rel2abs($_) } $target, @source;
+  ($target, @source) = 
+    map { Cwd::realpath( File::Spec->rel2abs($_) ) } 
+      ($target, @source);
 
   if ($option{v_debug} > 1)
   {
