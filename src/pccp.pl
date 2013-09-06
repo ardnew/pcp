@@ -27,13 +27,13 @@ our $ONOES = 1; # bad
 my %bootstrp_module = # these modules are needed for bootstrapping other features
 (
   'Getopt::Long'    => [ qw[] ],
+  'Pod::Usage'      => [ qw[] ],  
 );
 
 my %required_module =
 (
   'File::Find'      => [ qw[] ],
   'File::Spec'      => [ qw[] ],
-  'Pod::Usage'      => [ qw[] ],
 );
 
 my %optional_module =
@@ -137,11 +137,17 @@ sub pod ($$);
 # either a file or a directory
 #
 # on success, returns a list whose first element is TARGET, second element is the file 
-# type of TARGET (FTYPE = file, DTYPE = directory), and each following element is the
-# absolute path to a SOURCE. it is guaranteed that all SOURCE and TARGET elements 
-# are accessible with all necessary permisions on the filesystem.
+# type of TARGET ($FTYPE = file, $DTYPE = directory), and each following element is a
+# SOURCE. 
 #
 # on failure, prints an error message and stops program execution 
+#
+# NOTE: all SOURCE files returned are the original relative paths specified by the user,
+#       and no absolute path resolution is performed. however, it is guaranteed all
+#       returned SOURCE files have the necessary permissions for reading.
+#
+# NOTE: similarly- no absolute path resolution is performed on TARGET, and no check is
+#       performed to verify TARGET may be created or written to (see: sub copy_file).
 #
 sub parse_filenames (@);
 
@@ -317,7 +323,7 @@ sub parse_filenames (@)
   print_message $ERROR, "required source and target files not provided (try --usage)" 
     unless @_ > 1;
 
-  my ($target, $fdtype, @source, %unique) = shift @_;
+  my ($target, @source, $fdtype, %unique) = shift @_;
 
   %unique = map { $_ => undef } @_;
 
@@ -344,7 +350,7 @@ sub parse_filenames (@)
     push @source, $_;
   }
 
-  $fdtype = ($FTYPE, $DTYPE)[0+@source > 1 || -d $target || (grep { -d } @source) > 0];
+  $fdtype = ($FTYPE, $DTYPE)[ @source > 1 || -d $target || (grep { -d } @source) > 0 ];
 
   print_message $ERROR, "no valid source files provided" 
     unless @source;
@@ -355,16 +361,12 @@ sub parse_filenames (@)
 
   # no more error checking below this line
 
-  ($target, @source) = 
-    map { Cwd::realpath( File::Spec->rel2abs($_) ) } 
-      ($target, @source);
-
   if ($option{v_debug} > 1)
   {
     printf "source files:$/  %s$/$/", join("$/  ", @source);
       
     printf "target %s:$/  %s%s$/$/", 
-      $fdtype ? "directory" : "file", $target, -e $target ? "" : " (new)";
+      $fdtype == $DTYPE ? "directory" : "file", $target, -e $target ? "" : " (new)";
   }
 
   return $target, $fdtype, @source;
@@ -376,17 +378,17 @@ sub copy_file ($$$)
 
   my ($source, $target, $fdtype) = @_;
 
-  my @source = File::Spec->splitpath($source);
-  my @target = File::Spec->splitpath($target);
+  my @source = File::Spec->splitpath( Cwd::realpath($source) );
+  #my @target = File::Spec->splitpath($target);
 
-  if ($fdtype == $DTYPE)
-  {
-    $target[$DIR] = File::Spec->catdir($target[$DIR], $target[$FIL]);
-    $target[$FIL] = $source[$FIL];
-  }
+  #if ($fdtype == $DTYPE)
+  #{
+  #  $target[$DIR] = File::Spec->catdir($target[$DIR], $target[$FIL]);
+  #  $target[$FIL] = $source[$FIL];
+  #}
 
   $source = File::Spec->catpath(@source);
-  $target = File::Spec->catpath(@target);
+  #$target = File::Spec->catpath(@target);
 
   if ($option{v_debug})
   {
