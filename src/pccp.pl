@@ -17,8 +17,8 @@ our $DTYPE = 1; # "directory"
 our $OPTMO = 0; # optional module
 our $REQMO = 1; # required module
 
-our $PUSSY = 0; # good
-our $DICKS = 1; # bad
+our $ALLOK = 0; # good
+our $ONOES = 1; # bad
 
 
 ####[ constants ]#########################################################################
@@ -38,7 +38,7 @@ my %required_module =
 
 my %optional_module =
 (
-  'Term::ReasKey'   => [ qw[] ],
+  'Term::ReadKey'   => [ qw[] ],
 );
 
 my %option =
@@ -72,7 +72,7 @@ sub init;
 #   
 #   $NOTIC: print a notice to STDOUT (if -v set) and continue program execution
 #   $WARNG: print a warning to STDERR and continue program execution
-#   $ERROR: print an error to STDERR and exit program with error code $DICKS
+#   $ERROR: print an error to STDERR and exit program with error code $ONOES
 #
 # arg1: message importance level
 # arg2: list of messages to print
@@ -161,8 +161,8 @@ init;
 load_modules $REQMO, \%required_module;
 load_modules $OPTMO, \%optional_module;
 
-pod $PUSSY, "manpage" if $option{m_manpg};
-pod $PUSSY, "usage" if $option{h_usage};
+pod $ALLOK, "manpage" if $option{m_manpg};
+pod $ALLOK, "usage" if $option{h_usage};
 
 my ($target, $fdtype, @source) = parse_filenames reverse @ARGV;
 
@@ -174,7 +174,7 @@ for my $path (@source)
     copy_file($path, $target, $fdtype);
 }
 
-exit $PUSSY;
+exit $ALLOK;
 
 
 ####[ subroutines ]#######################################################################
@@ -202,7 +202,7 @@ sub print_message ($@)
   elsif ($ret == $ERROR)
   {
     printf STDERR "%s$/  %s$/$/", "error:", join "$/  ", @msg;
-    exit $DICKS;
+    exit $ONOES;
   }
   else
   {
@@ -458,3 +458,4 @@ Print verbose debug information (additional flags increases detail)
 =back
 
 =cut
+
