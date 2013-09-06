@@ -7,14 +7,18 @@ use warnings;
 ####[ globals ]###########################################################################
 
 
-our $RETOK = 0; # return value: no errors
-our $RETER = 1; # return value: error
+our $NOTIC = 0; # "notice" message level
+our $WARNG = 1; # "warning"
+our $ERROR = 2; # "error"
 
 our $FTYPE = 0; # "file"
 our $DTYPE = 1; # "directory"
 
 our $OPTMO = 0; # optional module
 our $REQMO = 1; # required module
+
+our $PUSSY = 0; # good
+our $DICKS = 1; # bad
 
 
 ####[ constants ]#########################################################################
@@ -28,13 +32,13 @@ my %bootstrp_module = # these modules are needed for bootstrapping other feature
 my %required_module =
 (
   'File::Find'      => [ qw[] ],
-  'File::Spec'      => [ qw[ rel2abs realpath ] ],
+  'File::Spec'      => [ qw[] ],
   'Pod::Usage'      => [ qw[] ],
 );
 
 my %optional_module =
 (
-  'Term::ReadKey'   => [ qw[] ],
+  'Term::ReasKey'   => [ qw[] ],
 );
 
 my %option =
@@ -64,15 +68,16 @@ my %pod =
 sub init;
 
 #
-# print an error message based on numeric error level:
+# print a list of messages based on increasing numeric importance level:
 #   
-#   $RETOK: print a warning and continue program execution
-#   $RETER: print an error and exit with error level as program return code
+#   $NOTIC: print a notice to STDOUT (if -v set) and continue program execution
+#   $WARNG: print a warning to STDERR and continue program execution
+#   $ERROR: print an error to STDERR and exit program with error code $DICKS
 #
-# arg1: error level for message (and program return code)
-# arg2: message
+# arg1: message importance level
+# arg2: list of messages to print
 #
-sub print_error ($$);
+sub print_message ($@);
 
 #
 # attempt to import external Perl modules
@@ -140,6 +145,13 @@ sub pod ($$);
 #
 sub parse_filenames (@);
 
+#
+# arg1: source file
+# arg2: target file
+# arg3: target file type
+#
+sub copy_file ($$$);
+
 
 ####[ main line ]#########################################################################
 
@@ -149,12 +161,20 @@ init;
 load_modules $REQMO, \%required_module;
 load_modules $OPTMO, \%optional_module;
 
-pod $RETOK, "manpage" if $option{m_manpg};
-pod $RETOK, "usage" if $option{h_usage};# or @ARGV < 2;
+pod $PUSSY, "manpage" if $option{m_manpg};
+pod $PUSSY, "usage" if $option{h_usage};
 
 my ($target, $fdtype, @source) = parse_filenames reverse @ARGV;
 
-exit $RETOK;
+for my $path (@source)
+{
+  print_message $WARNG, "$path: directory copy not implemented (ignoring)" and next
+    if -d $path;
+
+    copy_file($path, $target, $fdtype);
+}
+
+exit $PUSSY;
 
 
 ####[ subroutines ]#######################################################################
@@ -166,22 +186,27 @@ sub init
   parse_options \%option;
 }
 
-sub print_error ($$)
+sub print_message ($@)
 {
-  my ($ret, $msg) = @_;
+  my ($ret, @msg) = @_;
 
-  if ($ret == $RETOK)
+  if ($ret == $NOTIC)
   {
-    printf STDERR "%s$/  %s$/$/", "warning:", $msg if $option{v_debug};
+    printf STDOUT "%s$/  %s$/$/", "notice:", join "$/  ", @msg
+      if $option{v_debug};
   }
-  elsif ($ret == $RETER)
+  elsif ($ret == $WARNG)
   {
-    printf STDERR "%s$/  %s$/$/", "error:", $msg;
-    exit $ret;
+    printf STDERR "%s$/  %s$/$/", "warning:", join "$/  ", @msg; 
+  }
+  elsif ($ret == $ERROR)
+  {
+    printf STDERR "%s$/  %s$/$/", "error:", join "$/  ", @msg;
+    exit $DICKS;
   }
   else
   {
-    printf STDERR "[%s]$/  %s$/$/", $0, $msg;
+    printf STDERR "[%s]$/  %s$/$/", $0, join "$/  ", @msg;
   }
 }
 
@@ -208,8 +233,8 @@ sub load_modules ($$)
     {
       delete $$mod{$pkg} if $req == $OPTMO;
 
-      ( sub { print_error $RETOK, shift },
-        sub { print_error $RETER, shift }, )[$req == $REQMO]->($msg);
+      ( sub { print_message $NOTIC, shift },
+        sub { print_message $ERROR, shift }, )[$req == $REQMO]->($msg);
     }
   }
 }
@@ -253,7 +278,7 @@ sub parse_options ($)
         } 
         keys %{$opt}
     )
-    or print_error $RETER, 'wat? see --usage for more information';
+    or print_message $ERROR, 'wat? see --usage for more information';
   }
 
   $$opt{$_} = ${$$opt{$_}}[1] for keys %{$opt};
@@ -289,7 +314,7 @@ sub parse_filenames (@)
     show_modules $OPTMO, "feature", \%optional_module;
   }
     
-  print_error $RETER, "required source and target files not provided" 
+  print_message $ERROR, "required source and target files not provided (try --usage)" 
     unless @_ > 1;
 
   my ($target, $fdtype, @source, %unique) = shift @_;
@@ -298,34 +323,34 @@ sub parse_filenames (@)
 
   foreach (keys %unique)
   {
-    print_error $RETOK, "no such file or directory: $_" and next 
+    print_message $WARNG, "no such file or directory: $_" and next 
       unless -e;
 
     if (-f) 
     {    
-      print_error $RETOK, "cannot read file: $_" and next
+      print_message $WARNG, "cannot read file: $_" and next
         unless -r;
     } 
     elsif (-d) 
     { 
-      print_error $RETOK, "cannot read directory: $_" and next
+      print_message $WARNG, "cannot read directory: $_" and next
         unless -r;
     }       
     else 
     { 
-      print_error $RETOK, "unknown file type: $_" and next;
+      print_message $WARNG, "unknown file type: $_" and next;
     }
 
     push @source, $_;
   }
 
-  $fdtype = ($FTYPE, $DTYPE)[@source > 1 || -d $target || (grep { -d } @source) > 0];
+  $fdtype = ($FTYPE, $DTYPE)[0+@source > 1 || -d $target || (grep { -d } @source) > 0];
 
-  print_error $RETER, "no valid source files provided" 
+  print_message $ERROR, "no valid source files provided" 
     unless @source;
 
-  print_error $RETER, "target must be a directory " .
-                      "when copying a directory or more than one file" 
+  print_message $ERROR, "target must be a directory " .
+                        "when copying a directory or more than one file" 
     if $fdtype == $DTYPE and -f $target;
 
   # no more error checking below this line
@@ -343,6 +368,33 @@ sub parse_filenames (@)
   }
 
   return $target, $fdtype, @source;
+}
+
+sub copy_file ($$$)
+{
+  my ($VOL, $DIR, $FIL) = 0 .. 2;
+
+  my ($source, $target, $fdtype) = @_;
+
+  my @source = File::Spec->splitpath($source);
+  my @target = File::Spec->splitpath($target);
+
+  if ($fdtype == $DTYPE)
+  {
+    $target[$DIR] = File::Spec->catdir($target[$DIR], $target[$FIL]);
+    $target[$FIL] = $source[$FIL];
+  }
+
+  $source = File::Spec->catpath(@source);
+  $target = File::Spec->catpath(@target);
+
+  if ($option{v_debug})
+  {
+    print_message $NOTIC, sprintf "copy: [ %s ] -> [ %s ]", $source, $target;
+  }
+
+  print_message $WARNG, "cannot copy: file exists: $target (use -f to force)"
+    if -f $target && not $option{f_force};
 }
 
 
