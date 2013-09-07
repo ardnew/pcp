@@ -350,7 +350,7 @@ sub parse_filenames (@)
     push @source, $_;
   }
 
-  $fdtype = ($FTYPE, $DTYPE)[ @source > 1 || -d $target || (grep { -d } @source) > 0 ];
+  $fdtype = ($FTYPE, $DTYPE)[ @_ > 1 || -d $target || (grep { -e && -d } @_) > 0 ];
 
   print_message $ERROR, "no valid source files provided" 
     unless @source;
