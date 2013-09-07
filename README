@@ -7,14 +7,13 @@ Mac OS X 10.8.4, but any version of Perl 5 will work.
 
 The following Perl modules are required:
 
-  Pod::Usage
   Getopt::Long
-  Cwd
+  Pod::Usage
   File::Find
+  File::Spec
 
 And the following are optional:
 
-  File::Spec
   Term::ReadKey
 
 All of these packages are available for free from the CPAN
@@ -60,4 +59,4 @@ To view the built-in POD-generated man page:
                                                     CONTACT
 ============================================================
 
-e-mail: <andrew@ardnew.com>
+e-mail: andrew@ardnew.com

@@ -33,7 +33,9 @@ my %bootstrp_module = # these modules are needed for bootstrapping other feature
 my %required_module =
 (
   'File::Find'      => [ qw[] ],
+  'File::Path'      => [ qw[] ],
   'File::Spec'      => [ qw[] ],
+  'File::Copy'      => [ qw[] ],
 );
 
 my %optional_module =
@@ -142,11 +144,10 @@ sub pod ($$);
 #
 # on failure, prints an error message and stops program execution 
 #
-# NOTE: all SOURCE files returned are the original relative paths specified by the user,
-#       and no absolute path resolution is performed. however, it is guaranteed all
-#       returned SOURCE files have the necessary permissions for reading.
+# NOTE: absolute path resolution is performed on all existing SOURCE files, and it is 
+#       guaranteed they all have the necessary permissions for reading.
 #
-# NOTE: similarly- no absolute path resolution is performed on TARGET, and no check is
+# NOTE: however, no absolute path resolution is performed on TARGET, and no check is
 #       performed to verify TARGET may be created or written to (see: sub copy_file).
 #
 sub parse_filenames (@);
@@ -347,7 +348,7 @@ sub parse_filenames (@)
       print_message $WARNG, "unknown file type: $_" and next;
     }
 
-    push @source, $_;
+    push @source, Cwd::realpath($_);
   }
 
   $fdtype = ($FTYPE, $DTYPE)[ @_ > 1 || -d $target || (grep { -e && -d } @_) > 0 ];
@@ -377,26 +378,43 @@ sub copy_file ($$$)
   my ($VOL, $DIR, $FIL) = 0 .. 2;
 
   my ($source, $target, $fdtype) = @_;
+  
+  my @source = File::Spec->splitpath($source);
+  my @target = File::Spec->splitpath(File::Spec->rel2abs($target));
 
-  my @source = File::Spec->splitpath( Cwd::realpath($source) );
-  #my @target = File::Spec->splitpath($target);
+  if ($fdtype == $DTYPE)
+  {
+    $target[$DIR] = File::Spec->catdir($target[$DIR], $target[$FIL]);
+    $target[$FIL] = $source[$FIL];
+  }
 
-  #if ($fdtype == $DTYPE)
-  #{
-  #  $target[$DIR] = File::Spec->catdir($target[$DIR], $target[$FIL]);
-  #  $target[$FIL] = $source[$FIL];
-  #}
+  print_message $ERROR, 
+    sprintf "invalid path: directory does not exist: $target[$DIR] ".
+            "(use --force to create directory)"
+      unless -d $target[$DIR] or $option{f_force};
+
+  print_message $ERROR, sprintf "cannot create directory: $target[$DIR]: $!"
+    unless -d $target[$DIR] or File::Path::mkpath($target[$DIR]);
+
+  print_message $ERROR, sprintf "invalid path: cannot write to directory: $target[$DIR]"
+    unless -w $target[$DIR];
 
   $source = File::Spec->catpath(@source);
-  #$target = File::Spec->catpath(@target);
+  $target = File::Spec->catpath(@target);
 
+  print_message $ERROR, "cannot copy: file exists: $target (use --force)"
+    unless not -f $target or $option{f_force};
+
+  print_message $ERROR, "cannot overwrite file: $target: $!"
+    unless not -f $target or unlink $target;  
+  
   if ($option{v_debug})
   {
     print_message $NOTIC, sprintf "copy: [ %s ] -> [ %s ]", $source, $target;
   }
 
-  print_message $WARNG, "cannot copy: file exists: $target (use -f to force)"
-    if -f $target && not $option{f_force};
+  print_message $ERROR, "copy failed: $!"
+    unless File::Copy::copy($source, $target);
 }
 
 
