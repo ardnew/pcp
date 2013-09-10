@@ -45,12 +45,14 @@ my %optional_module =
 
 my %option =
 (
-  c_cksum => [ qw[              checksum|c|s      0 ] ], # 0 is "default value"
+  c_cksum => [ qw[                checksum|c      0 ] ], # 0 is "default value"
   f_force => [ qw[                   force|f      0 ] ],
   h_usage => [ qw[ usage|help|what|wat|u|h|?      0 ] ],
+  i_inter => [ qw[             interactive|i      0 ] ], 
   m_manpg => [ qw[             manpage|man|m      0 ] ],
   p_progr => [ qw[                progress|p      0 ] ],
   r_recur => [ qw[                 recurse|r=i   -1 ] ],
+  s_simul => [ qw[                simulate|s      0 ] ],
   v_debug => [ qw[         debug|verbose|d|v+     0 ] ],
 );
 
@@ -144,20 +146,26 @@ sub pod ($$);
 #
 # on failure, prints an error message and stops program execution 
 #
-# NOTE: absolute path resolution is performed on all existing SOURCE files, and it is 
-#       guaranteed they all have the necessary permissions for reading.
-#
-# NOTE: however, no absolute path resolution is performed on TARGET, and no check is
-#       performed to verify TARGET may be created or written to (see: sub copy_file).
-#
 sub parse_filenames (@);
 
 #
-# arg1: source file
-# arg2: target file
-# arg3: target file type
+# all necessary permissions and directories of TARGET are validated (and created if
+# the --force option is enabled).
 #
-sub copy_file ($$$);
+# arg1: target file
+# arg2: target file type
+# arg3..N: source file list
+#
+sub prepare_copy ($$@);
+
+#
+# arg1: source file counter
+# arg2: total number of source files
+# arg3: source file
+# arg4: target file
+# arg5: target file type
+#
+sub copy_file ($$$$$);
 
 
 ####[ main line ]#########################################################################
@@ -173,12 +181,18 @@ pod $ALLOK, "usage" if $option{h_usage};
 
 my ($target, $fdtype, @source) = parse_filenames reverse @ARGV;
 
-for my $path (@source)
-{
-  print_message $WARNG, "$path: directory copy not implemented (ignoring)" and next
-    if -d $path;
+prepare_copy $target, $fdtype, @source;
 
-    copy_file($path, $target, $fdtype);
+my ($scount, $stotal) = (0, scalar @source);
+
+print "total = $stotal  @source $/";
+
+for my $srccur (@source)
+{
+  print_message $WARNG, "$srccur: directory copy not implemented (ignoring)" and next
+    if -d $srccur;
+
+  copy_file(++$scount, $stotal, $srccur, $target, $fdtype);
 }
 
 exit $ALLOK;
@@ -351,16 +365,23 @@ sub parse_filenames (@)
     push @source, Cwd::realpath($_);
   }
 
-  $fdtype = ($FTYPE, $DTYPE)[ @_ > 1 || -d $target || (grep { -e && -d } @_) > 0 ];
+  $fdtype = ($FTYPE, $DTYPE)[ @_ > 1 || (-d $target || $target =~ /\/$/) || (grep { -e && -d } @_) > 0 ];
 
   print_message $ERROR, "no valid source files provided" 
     unless @source;
 
+  return $target, $fdtype, @source;
+}
+
+sub prepare_copy ($$@)
+{
+  my ($VOL, $DIR, $FIL) = 0 .. 2;
+
+  my ($target, $fdtype, @source, @target) = @_;
+
   print_message $ERROR, "target must be a directory " .
                         "when copying a directory or more than one file" 
     if $fdtype == $DTYPE and -f $target;
-
-  # no more error checking below this line
 
   if ($option{v_debug} > 1)
   {
@@ -370,51 +391,77 @@ sub parse_filenames (@)
       $fdtype == $DTYPE ? "directory" : "file", $target, -e $target ? "" : " (new)";
   }
 
-  return $target, $fdtype, @source;
+  for my $srccur (@source)
+  {
+    my $tarcur = $target;
+
+    my @srcdir = File::Spec->splitpath($srccur);
+    my @tardir = File::Spec->splitpath(File::Spec->rel2abs($tarcur));
+
+    if ($fdtype == $DTYPE)
+    {
+      $tardir[$DIR] = File::Spec->catdir($tardir[$DIR], $tardir[$FIL]);
+      $tardir[$FIL] = $srcdir[$FIL];
+    }
+
+    $srccur = File::Spec->catpath(@srcdir);
+    $tarcur = File::Spec->catpath(@tardir);
+
+    my ($srcdir, $tardir) = map { File::Basename::dirname($_) } ($srccur, $tarcur);
+
+    print_message $ERROR, "cannot copy: file exists: $tarcur (use --force)"
+      unless not -f $tarcur or $option{f_force};
+    print_message $ERROR, "cannot overwrite file: $tarcur: $!"
+      unless not -f $tarcur or unlink $tarcur;  
+
+    print_message $ERROR, "cannot copy: file exists: $tardir (use --force)"
+      unless not -f $tardir or $option{f_force};
+    print_message $ERROR, "cannot overwrite file: $tardir: $!"
+      unless not -f $tardir or unlink $tardir;        
+
+    print_message $ERROR, 
+      sprintf "invalid path: directory does not exist: $tardir[$DIR] ".
+              "(use --force to create directory)"
+        unless -d $tardir[$DIR] or $option{f_force};
+
+    print_message $ERROR, sprintf "cannot create directory: $tardir[$DIR]: $!"
+      unless -d $tardir[$DIR] or File::Path::mkpath($tardir[$DIR]);
+
+    print_message $ERROR, sprintf "invalid path: cannot write to directory: $tardir[$DIR]"
+      unless -w $tardir[$DIR];
+  }  
 }
 
-sub copy_file ($$$)
+sub copy_file ($$$$$)
 {
-  my ($VOL, $DIR, $FIL) = 0 .. 2;
+  my ($scount, $stotal, $source, $target, $fdtype) = @_;
 
-  my ($source, $target, $fdtype) = @_;
-  
-  my @source = File::Spec->splitpath($source);
-  my @target = File::Spec->splitpath(File::Spec->rel2abs($target));
+  my $cwidth = int(log($stotal) / log(10) + 1); # log10($stotal)+1 = number of digits
 
-  if ($fdtype == $DTYPE)
+  if ($option{s_simul} or $option{v_debug})
   {
-    $target[$DIR] = File::Spec->catdir($target[$DIR], $target[$FIL]);
-    $target[$FIL] = $source[$FIL];
+    #
+    # NOTE: scalar interpolation in the format string will cause printf to take a
+    #       mondo shit all over the place if the fractional part exists (and is large):
+    #        
+    #           $w = 2.12345;
+    #           printf "%${w}f", 1.0; 
+    #
+    #       the format string tells printf to display 12345 digits after decimal point!
+    #
+    #printf "[ %${cwidth}d / %${cwidth}d ] copy: %s -> %s$/", 
+    #    $scount, $stotal, $source, $target;
+
+    # other than casting the width to integer, using the width specifier * is safer and
+    # easier to read
+    printf "[ %*d / %*d ] copy: %s -> %s$/", 
+        $cwidth, $scount, $cwidth, $stotal, $source, $target;
   }
 
-  print_message $ERROR, 
-    sprintf "invalid path: directory does not exist: $target[$DIR] ".
-            "(use --force to create directory)"
-      unless -d $target[$DIR] or $option{f_force};
-
-  print_message $ERROR, sprintf "cannot create directory: $target[$DIR]: $!"
-    unless -d $target[$DIR] or File::Path::mkpath($target[$DIR]);
-
-  print_message $ERROR, sprintf "invalid path: cannot write to directory: $target[$DIR]"
-    unless -w $target[$DIR];
-
-  $source = File::Spec->catpath(@source);
-  $target = File::Spec->catpath(@target);
-
-  print_message $ERROR, "cannot copy: file exists: $target (use --force)"
-    unless not -f $target or $option{f_force};
-
-  print_message $ERROR, "cannot overwrite file: $target: $!"
-    unless not -f $target or unlink $target;  
-  
-  if ($option{v_debug})
+  unless ($option{s_simul})
   {
-    print_message $NOTIC, sprintf "copy: [ %s ] -> [ %s ]", $source, $target;
+    print_message $ERROR, "copy failed: $!" unless File::Copy::copy($source, $target);
   }
-
-  print_message $ERROR, "copy failed: $!"
-    unless File::Copy::copy($source, $target);
 }
 
 
@@ -433,13 +480,13 @@ __END__
 
 =head1 SYNOPSIS
 
-B<pccp> [ options ] [ B<-?cdfhmpsuv> ] F<source-file> F<target-file>
+B<pccp> [ options ] [ B<-?cdfhimpsuv> ] F<source-file> F<target-file>
 
-B<pccp> [ options ] [ B<-?cdfhmpsuv> ] F<source-file(s)> F<target-directory>
+B<pccp> [ options ] [ B<-?cdfhimpsuv> ] F<source-file(s)> F<target-directory>
 
 =head1 DESCRIPTION
 
-B<pccp> will perform a block-level copy on a set of files or directories from one location to another, and it can display a real-time progress indicator with checksum details of the resulting copy operation.
+B<pccp> will perform a file-level copy on a set of files or directories from one location to another, and it can display a real-time progress indicator with checksum details of the resulting copy operation.
 
 The program does not currently support asynchronous I/O, so copy operations from one disk to another may be painfully slow.
 
@@ -447,7 +494,7 @@ The program does not currently support asynchronous I/O, so copy operations from
 
 =over 8
 
-=item B<--checksum>, B<-c>, B<-s>
+=item B<--checksum>, B<-c>
 
 Print checksum of source file and resulting copied file
 
@@ -458,6 +505,10 @@ Force copy even if destination file already exists
 =item B<--help>, B<--usage>, B<--wat>, B<-h>, B<-u>, B<-w>, B<-?>
 
 Print synopsis and options to STDOUT and exit
+
+=item B<--interactive>, B<-i>
+
+Before performing each file copy, prompt the user for approval
 
 =item B<--manpage>, B<-m>
 
@@ -470,6 +521,10 @@ Use visual indicator to show progress of copy operation
 =item B<--recurse> F<depth>, B<-r> F<depth>
 
 When copying a directory, do not copy files more than F<depth> levels deep
+
+=item B<--simulate>, B<-s>
+
+Do not actually perform the copy operation, but print to STDOUT the operations that would be performed instead
 
 =item B<--debug>, B<--verbose>, B<-d>, B<-v>
 
