@@ -164,8 +164,9 @@ sub prepare_copy ($$@);
 # arg3: source file
 # arg4: target file
 # arg5: target file type
+# arg6: buffer size
 #
-sub copy_file ($$$$$);
+sub copy_file ($$$$$$);
 
 
 ####[ main line ]#########################################################################
@@ -183,14 +184,32 @@ my ($target, $fdtype, @source) = parse_filenames reverse @ARGV;
 
 prepare_copy $target, $fdtype, @source;
 
-my ($scount, $stotal) = (0, length @source);
+my ($scount, $stotal) = (0, scalar @source);
+
+use Benchmark qw(:all);
 
 for my $srccur (@source)
 {
   print_message $WARNG, "$srccur: directory copy not implemented (ignoring)" and next
     if -d $srccur;
 
-  copy_file(++$scount, $stotal, $srccur, $target, $fdtype);
+  cmpthese
+  (
+    5, 
+    {
+        '32' => copy_file(++$scount, $stotal, $srccur, $target, $fdtype, 32),
+        '64' => copy_file(++$scount, $stotal, $srccur, $target, $fdtype, 64),
+       '128' => copy_file(++$scount, $stotal, $srccur, $target, $fdtype, 128),
+       '256' => copy_file(++$scount, $stotal, $srccur, $target, $fdtype, 256),
+       '512' => copy_file(++$scount, $stotal, $srccur, $target, $fdtype, 512),
+      '1024' => copy_file(++$scount, $stotal, $srccur, $target, $fdtype, 1024),
+      '2048' => copy_file(++$scount, $stotal, $srccur, $target, $fdtype, 2048),
+      '4096' => copy_file(++$scount, $stotal, $srccur, $target, $fdtype, 4096),
+      '8192' => copy_file(++$scount, $stotal, $srccur, $target, $fdtype, 8192),
+      '8196' => copy_file(++$scount, $stotal, $srccur, $target, $fdtype, 8196),
+    }
+  );
+  #copy_file(++$scount, $stotal, $srccur, $target, $fdtype);
 }
 
 exit $ALLOK;
@@ -430,21 +449,82 @@ sub prepare_copy ($$@)
   }  
 }
 
-sub copy_file ($$$$$)
+sub copy_file ($$$$$$)
 {
-  my ($scount, $stotal, $source, $target, $fdtype) = @_;
+  my ($scount, $stotal, $source, $target, $fdtype, $buffsz) = @_;
 
   my $cwidth = int(log($stotal) / log(10) + 1); # log10($stotal)+1 = number of digits
 
-  if ($option{s_simul} or $option{v_debug})
+  if ($fdtype == $DTYPE)
   {
-    printf "[ %*d / %*d ] copy: %s -> %s$/", 
-        $cwidth, $scount, $cwidth, $stotal, $source, $target;
+    $target = File::Spec->catfile(File::Spec->splitdir($target), 
+                                 (File::Spec->splitpath($source))[2]);
   }
 
   unless ($option{s_simul})
   {
-    print_message $ERROR, "copy failed: $!" unless File::Copy::copy($source, $target);
+    #print_message $ERROR, "copy failed: $!" unless File::Copy::copy($source, $target);
+
+    my $read; # source file "read" handle
+    my $writ; # target file "write" handle
+    my $buff; # byte buffer
+    my $size; # size of byte buffer
+
+    $size = $buffsz;
+
+    print_message $ERROR, sprintf "cannot open file for reading: $source: $!"
+      unless open $read, '<', $source;
+    print_message $ERROR, sprintf "cannot put file in binary mode: $source: $!"
+      unless binmode $read;
+
+    print_message $ERROR, sprintf "cannot open file for writing: $target: $!"
+      unless open $writ, '>', $target;
+    print_message $ERROR, sprintf "cannot put file in binary mode: $target: $!"
+      unless binmode $writ;   
+
+    my $rsize = -s $read;
+    my $wsize = 0;
+    my $width = int(log($rsize) / log(10) + 1);
+
+    my $cperr = undef; 
+
+    if ($option{s_simul} or $option{v_debug} )
+    {
+      print_message $NOTIC, sprintf "[ FILE %*d / %*d | %*d bytes ] %s -> %s", 
+          $cwidth, $scount, $cwidth, $stotal, $cwidth, $rsize, $source, $target;
+    }    
+
+    {
+      my ($r, $w, $t) = (0, 0, 0);
+
+      $cperr = sprintf "sysread(): cannot read file: $source: $!" and last
+        unless defined ($r = sysread $read, $buff, $size);
+
+      last unless $r;
+
+      for ($w = 0; $w < $r; $w += $t)
+      {
+        $cperr = sprintf "syswrite(): cannot write file: $target: $!" and last
+          unless $t = syswrite $writ, $buff, $r - $w, $w;
+
+        $wsize += $t;
+
+        if ($option{v_debug} > 2)
+        {
+          printf "      [ %*d / %*d ] ( %6.2f%% )$/", 
+            $width, $wsize, $width, $rsize, $wsize / $rsize * 100.0;
+        }
+      }
+
+      redo;
+    }
+
+    print $/ if $option{v_debug} > 2;
+
+    close $writ;
+    close $read;
+
+    print_message $ERROR, $cperr if defined $cperr;
   }
 }
 
