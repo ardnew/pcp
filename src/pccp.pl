@@ -195,7 +195,7 @@ for my $srccur (@source)
 
   cmpthese
   (
-    5, 
+    -60, 
     {
         '32' => copy_file(++$scount, $stotal, $srccur, $target, $fdtype, 32),
         '64' => copy_file(++$scount, $stotal, $srccur, $target, $fdtype, 64),
