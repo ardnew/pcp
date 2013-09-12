@@ -440,20 +440,6 @@ sub copy_file ($$$$$)
 
   if ($option{s_simul} or $option{v_debug})
   {
-    #
-    # NOTE: scalar interpolation in the format string will cause printf to take a
-    #       mondo shit all over the place if the fractional part exists (and is large):
-    #        
-    #           $w = 2.12345;
-    #           printf "%${w}f", 1.0; 
-    #
-    #       the format string tells printf to display 12345 digits after decimal point!
-    #
-    #printf "[ %${cwidth}d / %${cwidth}d ] copy: %s -> %s$/", 
-    #    $scount, $stotal, $source, $target;
-
-    # other than casting the width to integer, using the width specifier * is safer and
-    # easier to read
     printf "[ %*d / %*d ] copy: %s -> %s$/", 
         $cwidth, $scount, $cwidth, $stotal, $source, $target;
   }
