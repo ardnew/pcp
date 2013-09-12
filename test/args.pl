@@ -18,8 +18,8 @@ use File::Spec;
 our $PCCP_PATH = (shift) || File::Spec->catfile(('..', 'src'), 'pccp.pl');
 
 #
-# redirect pccp.pl's writes from STDERR to STDOUT, which is mostly 
-#  a convenience for paging output with e.g. `less' or `more'
+# redirect pccp.pl's writes from STDERR to STDOUT, which is only a 
+#  convenience for paging output with e.g. `less' or `more'
 #
 our $REDIR_ERR = 1; 
 
@@ -29,7 +29,7 @@ my $SD_1  = "sd-1";
 my $SD_2  = "sd-2";
 my $TF    = "tf";
 my $TD    = "td";
-my $FS    = "fs";
+my $BF    = "fs";
 
 my $FN    = 0;
 my $FE    = 1;
@@ -40,53 +40,51 @@ my @FSTATSTR = qw| no-file file no-dir dir |;
 
 sub dotest
 {    
-        my $n = shift @_;
-        my @f = @_;    
-        my @a = ();
+  my $n = shift @_;
+  my @f = @_;    
+  my @a = ();
 
-        my $s = "TEST $n: ";
-        for (0 .. (@f / 2) - 1)
-        {
-                $s .= sprintf "%s [%s] ", 
-                                $f[2*$_], $FSTATSTR[$f[2*$_+1]];
-        }
-        print $s, $/;
+  my $FS = File::Spec->catdir(('.', $BF), sprintf "%03d", $n);
 
-        print `rm -rf \"$FS\"$/`;
-        print `mkdir \"$FS\"$/`;
-        
-        for (0 .. (@f / 2) - 1)
-        {
-                my $f = $FS . "/" . $f[2*$_];
-                my $e = $f[2*$_+1];
+  my $s = "TEST $n: ";
+  for (0 .. (@f / 2) - 1)
+  {
+    $s .= sprintf "%s [%s] ", 
+    $f[2*$_], $FSTATSTR[$f[2*$_+1]];
+  }
+  print $s, $/;
 
-                push @a, "\"$f\"";
+  print `rm -rf \"$FS\"$/`;
+  print `mkdir -p \"$FS\"$/`;
 
-                if ($e == 1)
-                {
-                        print `touch \"$f\"$/`;
-                }
-                elsif ($e == 3)
-                {
-                        print `mkdir \"$f\"$/`;
-                }
-        }
+  for (0 .. (@f / 2) - 1)
+  {
+    my $f = $FS . "/" . $f[2*$_];
+    my $e = $f[2*$_+1];
 
-        if ($REDIR_ERR)
-        {
-                print `perl \"$PCCP_PATH\" -vv @a 2>&1`;
-        }
-        else
-        {
-                print `perl \"$PCCP_PATH\" -vv @a`;
-        }
+    push @a, "\"$f\"";
 
-        print $/, $/;
+    if ($e == 1)
+    {
+      print `touch \"$f\"$/`;
+    }
+    elsif ($e == 3)
+    {
+      print `mkdir \"$f\"$/`;
+    }
+  }
 
-        print `rm -rf \"$FS\"$/`;
+  my $cmd = "perl \"$PCCP_PATH\" -vvf @a";
+
+  $cmd = "$cmd 2>&1" if $REDIR_ERR;
+
+  print `$cmd`;
+
+  print $/, $/;
 }    
 
 
+print `rm -rf \"$BF\"$/`;
 print "#" x 100, $/, $/;
 
 my $testcount = 0;
