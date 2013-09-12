@@ -183,9 +183,7 @@ my ($target, $fdtype, @source) = parse_filenames reverse @ARGV;
 
 prepare_copy $target, $fdtype, @source;
 
-my ($scount, $stotal) = (0, scalar @source);
-
-print "total = $stotal  @source $/";
+my ($scount, $stotal) = (0, length @source);
 
 for my $srccur (@source)
 {
