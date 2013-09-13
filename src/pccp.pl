@@ -508,7 +508,7 @@ sub copy_file ($$$$$)
     print_message $ERROR, sprintf "cannot put file in binary mode: $target: $!"
       unless binmode $writ;
 
-    my $rsize = -s $read;
+    my $rsize = -s $read || 1000;
     my $wsize = 0;
     my $width = int(log($rsize) / log(10) + 1);
 
