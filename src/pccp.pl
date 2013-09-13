@@ -20,6 +20,10 @@ our $REQMO = 1; # required module
 our $ALLOK = 0; # good
 our $ONOES = 1; # bad
 
+our $BUFFS = 1024; # default byte buffer I/O size
+
+our $TRASH = '/dev/null'; # UNIX-only for now
+
 
 ####[ constants ]#########################################################################
 
@@ -41,19 +45,22 @@ my %required_module =
 my %optional_module =
 (
   'Term::ReadKey'   => [ qw[] ],
+  'Benchmark'       => [ qw[ :all ] ],
 );
 
 my %option =
 (
-  c_cksum => [ qw[                checksum|c      0 ] ], # 0 is "default value"
-  f_force => [ qw[                   force|f      0 ] ],
-  h_usage => [ qw[ usage|help|what|wat|u|h|?      0 ] ],
-  i_inter => [ qw[             interactive|i      0 ] ], 
-  m_manpg => [ qw[             manpage|man|m      0 ] ],
-  p_progr => [ qw[                progress|p      0 ] ],
-  r_recur => [ qw[                 recurse|r=i   -1 ] ],
-  s_simul => [ qw[                simulate|s      0 ] ],
-  v_debug => [ qw[         debug|verbose|d|v+     0 ] ],
+  b_buffs => [ qw[                  buffer|b=i ], $BUFFS  ], 
+  c_cksum => [ qw[                checksum|c          0 ] ], # 0 is "default value"
+  f_force => [ qw[                   force|f          0 ] ],
+  h_usage => [ qw[ usage|help|what|wat|u|h|?          0 ] ],
+  i_inter => [ qw[             interactive|i          0 ] ], 
+  m_manpg => [ qw[             manpage|man|m          0 ] ],
+  p_progr => [ qw[                progress|p          0 ] ],
+  r_recur => [ qw[                 recurse|r=i       -1 ] ],
+  s_simul => [ qw[                simulate|s          0 ] ],
+  t_bench => [ qw[                    test|t=i        0 ] ],
+  v_debug => [ qw[         debug|verbose|d|v+         0 ] ],
 );
 
 my %pod =
@@ -159,14 +166,26 @@ sub parse_filenames (@);
 sub prepare_copy ($$@);
 
 #
+# performs a block-level copy of one file
+#
 # arg1: source file counter
 # arg2: total number of source files
 # arg3: source file
 # arg4: target file
 # arg5: target file type
-# arg6: buffer size
 #
-sub copy_file ($$$$$$);
+sub copy_file ($$$$$);
+
+#
+# uses Benchmark module to compare timings of sub copy_file with various buffer sizes
+#
+# arg1: source file counter
+# arg2: total number of source files
+# arg3: source file
+# arg4: target file
+# arg5: target file type
+#
+sub test_buffers ($$$$$);
 
 
 ####[ main line ]#########################################################################
@@ -186,30 +205,19 @@ prepare_copy $target, $fdtype, @source;
 
 my ($scount, $stotal) = (0, scalar @source);
 
-use Benchmark qw(:all);
-
 for my $srccur (@source)
 {
   print_message $WARNG, "$srccur: directory copy not implemented (ignoring)" and next
     if -d $srccur;
 
-  cmpthese
-  (
-    -60 * 5, 
-    {
-        '32' => copy_file(++$scount, $stotal, $srccur, $target, $fdtype, 32),
-        '64' => copy_file(++$scount, $stotal, $srccur, $target, $fdtype, 64),
-       '128' => copy_file(++$scount, $stotal, $srccur, $target, $fdtype, 128),
-       '256' => copy_file(++$scount, $stotal, $srccur, $target, $fdtype, 256),
-       '512' => copy_file(++$scount, $stotal, $srccur, $target, $fdtype, 512),
-      '1024' => copy_file(++$scount, $stotal, $srccur, $target, $fdtype, 1024),
-      '2048' => copy_file(++$scount, $stotal, $srccur, $target, $fdtype, 2048),
-      '4096' => copy_file(++$scount, $stotal, $srccur, $target, $fdtype, 4096),
-      '8192' => copy_file(++$scount, $stotal, $srccur, $target, $fdtype, 8192),
-      '8196' => copy_file(++$scount, $stotal, $srccur, $target, $fdtype, 8196),
-    }
-  );
-  #copy_file(++$scount, $stotal, $srccur, $target, $fdtype);
+  if ($option{t_bench})
+  {
+    test_buffers($scount, $stotal, $srccur, $target, $fdtype)
+  }
+  else
+  {
+    copy_file(++$scount, $stotal, $srccur, $target, $fdtype);
+  }
 }
 
 exit $ALLOK;
@@ -222,6 +230,15 @@ sub init
 {
   load_modules 1, \%bootstrp_module;
   parse_options \%option;
+
+  print_message $ERROR, "module not found: Benchmark is required for I/O buffer tests"
+    unless not $option{t_bench} or exists $optional_module{Benchmark};
+
+  print_message $WARNG, "specified buffer too small: $option{b_buffs}: using $BUFFS"
+    and $option{b_buffs} = $BUFFS unless $option{b_buffs} > 0;
+
+  print_message $WARNG, "specified buffer too large: $option{b_buffs}: using $BUFFS"
+    and $option{b_buffs} = $BUFFS unless $option{b_buffs} < 0x7FFFFFFF; # too big...? 
 }
 
 sub print_message ($@)
@@ -382,7 +399,9 @@ sub parse_filenames (@)
     push @source, Cwd::realpath($_);
   }
 
-  $fdtype = ($FTYPE, $DTYPE)[ @_ > 1 || (-d $target || $target =~ /\/$/) || (grep { -e && -d } @_) > 0 ];
+  $fdtype = ($FTYPE, $DTYPE)[ @_ > 1 
+    || (-d $target || $target =~ /\/$/) 
+    || (grep { -e && -d } @_) > 0 ];
 
   print_message $ERROR, "no valid source files provided" 
     unless @source;
@@ -407,6 +426,9 @@ sub prepare_copy ($$@)
     printf "target %s:$/  %s%s$/$/", 
       $fdtype == $DTYPE ? "directory" : "file", $target, -e $target ? "" : " (new)";
   }
+
+  print_message $NOTIC, "enabling --force for benchmarking tests", $option{f_force} = 1
+    if $option{t_bench} and not $option{f_force};
 
   for my $srccur (@source)
   {
@@ -449,28 +471,32 @@ sub prepare_copy ($$@)
   }  
 }
 
-sub copy_file ($$$$$$)
+sub copy_file ($$$$$)
 {
   my ($scount, $stotal, $source, $target, $fdtype, $buffsz) = @_;
 
   my $cwidth = int(log($stotal) / log(10) + 1); # log10($stotal)+1 = number of digits
 
-  if ($fdtype == $DTYPE)
+  if ($option{s_simul})
   {
-    $target = File::Spec->catfile(File::Spec->splitdir($target), 
-                                 (File::Spec->splitpath($source))[2]);
+    $target = $TRASH;
+  }
+  else
+  {
+    if ($fdtype == $DTYPE)
+    {
+      $target = File::Spec->catfile(File::Spec->splitdir($target), 
+                                   (File::Spec->splitpath($source))[2]);
+    }
   }
 
-  unless ($option{s_simul})
   {
-    #print_message $ERROR, "copy failed: $!" unless File::Copy::copy($source, $target);
-
     my $read; # source file "read" handle
     my $writ; # target file "write" handle
     my $buff; # byte buffer
     my $size; # size of byte buffer
 
-    $size = $buffsz;
+    $size = $buffsz || 819;
 
     print_message $ERROR, sprintf "cannot open file for reading: $source: $!"
       unless open $read, '<', $source;
@@ -480,7 +506,7 @@ sub copy_file ($$$$$$)
     print_message $ERROR, sprintf "cannot open file for writing: $target: $!"
       unless open $writ, '>', $target;
     print_message $ERROR, sprintf "cannot put file in binary mode: $target: $!"
-      unless binmode $writ;   
+      unless binmode $writ;
 
     my $rsize = -s $read;
     my $wsize = 0;
@@ -528,6 +554,69 @@ sub copy_file ($$$$$$)
   }
 }
 
+sub test_buffers ($$$$$)
+{
+  my ($scount, $stotal, $source, $target, $fdtype, $buffsz) = @_;
+
+  {
+    cmpthese
+    (
+      $option{t_bench}, 
+      {
+          '[ 32 B ]' => sub 
+                        { 
+                          $option{b_buffs} = 32; 
+                          copy_file(++$scount, $stotal, $source, $target, $fdtype) 
+                        },
+          '[ 64 B ]' => sub 
+                        { 
+                          $option{b_buffs} = 64; 
+                          copy_file(++$scount, $stotal, $source, $target, $fdtype) 
+                        },
+         '[ 128 B ]' => sub 
+                        { 
+                          $option{b_buffs} = 128; 
+                          copy_file(++$scount, $stotal, $source, $target, $fdtype) 
+                        },
+         '[ 256 B ]' => sub 
+                        { 
+                          $option{b_buffs} = 256; 
+                          copy_file(++$scount, $stotal, $source, $target, $fdtype) 
+                        },
+         '[ 512 B ]' => sub 
+                        { 
+                          $option{b_buffs} = 512; 
+                          copy_file(++$scount, $stotal, $source, $target, $fdtype) 
+                        },
+        '[ 1024 B ]' => sub 
+                        { 
+                          $option{b_buffs} = 1024; 
+                          copy_file(++$scount, $stotal, $source, $target, $fdtype) 
+                        },
+        '[ 2048 B ]' => sub 
+                        { 
+                          $option{b_buffs} = 2048; 
+                          copy_file(++$scount, $stotal, $source, $target, $fdtype) 
+                        },
+        '[ 4096 B ]' => sub 
+                        { 
+                          $option{b_buffs} = 4096; 
+                          copy_file(++$scount, $stotal, $source, $target, $fdtype) 
+                        },
+        '[ 8192 B ]' => sub 
+                        { 
+                          $option{b_buffs} = 8192; 
+                          copy_file(++$scount, $stotal, $source, $target, $fdtype) 
+                        },
+        '[ 8196 B ]' => sub 
+                        { 
+                          $option{b_buffs} = 8196; 
+                          copy_file(++$scount, $stotal, $source, $target, $fdtype) 
+                        },
+      }
+    );
+  }
+}
 
 __END__
 
@@ -544,19 +633,23 @@ __END__
 
 =head1 SYNOPSIS
 
-B<pccp> [ options ] [ B<-?cdfhimpsuv> ] F<source-file> F<target-file>
+B<pccp> [ options ] [ B<-?bcdfhimpsuv> ] F<source-file> F<target-file>
 
-B<pccp> [ options ] [ B<-?cdfhimpsuv> ] F<source-file(s)> F<target-directory>
+B<pccp> [ options ] [ B<-?bcdfhimpsuv> ] F<source-file(s)> F<target-directory>
 
 =head1 DESCRIPTION
 
-B<pccp> will perform a file-level copy on a set of files or directories from one location to another, and it can display a real-time progress indicator with checksum details of the resulting copy operation.
+B<pccp> will perform a block-level copy on a set of files or directories from one location to another, and it can display a real-time progress indicator with checksum details of the resulting copy operation.
 
 The program does not currently support asynchronous I/O, so copy operations from one disk to another may be painfully slow.
 
 =head1 OPTIONS
 
 =over 8
+
+=item B<--buffer=>F<bytes>, B<-b> F<bytes>
+
+Read and write F<bytes> of data into a buffer during copy (default: 1024)
 
 =item B<--checksum>, B<-c>
 
@@ -582,13 +675,17 @@ Display the manual page and exit
 
 Use visual indicator to show progress of copy operation
 
-=item B<--recurse> F<depth>, B<-r> F<depth>
+=item B<--recurse=>F<depth>, B<-r> F<depth>
 
 When copying a directory, do not copy files more than F<depth> levels deep
 
 =item B<--simulate>, B<-s>
 
-Do not actually perform the copy operation, but print to STDOUT the operations that would be performed instead
+Do not actually perform the copy operation, but print to STDOUT the operations that would be performed instead. (UNIX: writes to F</dev/null>)
+
+=item B<--test=>F<iterations>, B<-t> F<iterations>
+
+Requires F<Benchmark> (Perl 5 core module). Performs F<iterations> copy operations for each of the following buffer sizes (in bytes): 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 8196. The Benchmark module then prints a nice comparison table.
 
 =item B<--debug>, B<--verbose>, B<-d>, B<-v>
 

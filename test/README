@@ -1,3 +1,5 @@
-the following command is used to run the args.pl test suite and log the results:
+the following commands are used to run the test suites and log the results:
 
 D="log/args.pl"; mkdir -p "$D"; perl args.pl > "$D/`date`"
+
+D="log/buffer.pl"; mkdir -p "$D"; perl args.pl > "$D/`date`"
