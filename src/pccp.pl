@@ -7,9 +7,10 @@ use warnings;
 ####[ globals ]###########################################################################
 
 
-our $NOTIC = 0; # "notice" message level
-our $WARNG = 1; # "warning"
-our $ERROR = 2; # "error"
+our $GINFO = 0; # "general" message level
+our $NOTIC = 1; # "notice" (only prints if -v)
+our $WARNG = 2; # "warning"
+our $ERROR = 3; # "error"
 
 our $FTYPE = 0; # "file"
 our $DTYPE = 1; # "directory"
@@ -20,7 +21,7 @@ our $REQMO = 1; # required module
 our $ALLOK = 0; # good
 our $ONOES = 1; # bad
 
-our $BUFFS = 1024; # default byte buffer I/O size
+our $BUFFS = 16 * 1024; # default I/O byte buffer size (16 KiB)
 
 our $TRASH = '/dev/null'; # UNIX-only for now
 
@@ -245,7 +246,11 @@ sub print_message ($@)
 {
   my ($ret, @msg) = @_;
 
-  if ($ret == $NOTIC)
+  if ($ret == $GINFO)
+  {
+    printf STDOUT "%s$/  %s$/$/", "info:", join "$/  ", @msg; 
+  }
+  elsif ($ret == $NOTIC)
   {
     printf STDOUT "%s$/  %s$/$/", "notice:", join "$/  ", @msg
       if $option{v_debug};
@@ -427,8 +432,8 @@ sub prepare_copy ($$@)
       $fdtype == $DTYPE ? "directory" : "file", $target, -e $target ? "" : " (new)";
   }
 
-  print_message $NOTIC, "enabling --force for benchmarking tests", $option{f_force} = 1
-    if $option{t_bench} and not $option{f_force};
+  print_message $NOTIC, "enabling --force for benchmarking tests"
+    if $option{t_bench} and not $option{f_force} and $option{f_force} = 1;
 
   for my $srccur (@source)
   {
@@ -473,7 +478,7 @@ sub prepare_copy ($$@)
 
 sub copy_file ($$$$$)
 {
-  my ($scount, $stotal, $source, $target, $fdtype, $buffsz) = @_;
+  my ($scount, $stotal, $source, $target, $fdtype) = @_;
 
   my $cwidth = int(log($stotal) / log(10) + 1); # log10($stotal)+1 = number of digits
 
@@ -496,7 +501,7 @@ sub copy_file ($$$$$)
     my $buff; # byte buffer
     my $size; # size of byte buffer
 
-    $size = $buffsz || 819;
+    $size = $option{t_bench} ? $BUFFS : $option{b_buffs} || $BUFFS;
 
     print_message $ERROR, sprintf "cannot open file for reading: $source: $!"
       unless open $read, '<', $source;
@@ -514,11 +519,22 @@ sub copy_file ($$$$$)
 
     my $cperr = undef; 
 
-    if ($option{s_simul} or $option{v_debug} )
+    if ($option{t_bench} and ($scount - 1) % $option{t_bench} == 0)
     {
-      print_message $NOTIC, sprintf "[ FILE %*d / %*d | %*d bytes ] %s -> %s", 
-          $cwidth, $scount, $cwidth, $stotal, $cwidth, $rsize, $source, $target;
-    }    
+      print_message $GINFO,
+        sprintf 
+          "[ TEST %*d / %*d | %*d bytes | %d byte buffer | %d iterations ] %s -> %s", 
+        $cwidth, $scount, $cwidth, $stotal, $cwidth, $rsize, 
+          $size, $option{t_bench}, $source, $target;
+    }
+    elsif ($option{s_simul} or $option{v_debug} )
+    {
+      print_message $NOTIC, 
+        sprintf 
+          "[ FILE %*d / %*d | %*d bytes | %d byte buffer ] %s -> %s", 
+        $cwidth, $scount, $cwidth, $stotal, $cwidth, $rsize,
+          $size, $source, $target;
+    }
 
     {
       my ($r, $w, $t) = (0, 0, 0);
@@ -556,66 +572,29 @@ sub copy_file ($$$$$)
 
 sub test_buffers ($$$$$)
 {
-  my ($scount, $stotal, $source, $target, $fdtype, $buffsz) = @_;
+  my ($scount, $stotal, $source, $target, $fdtype, $evalcs) = @_;
 
-  {
-    cmpthese
-    (
-      $option{t_bench}, 
-      {
-          '[ 32 B ]' => sub 
-                        { 
-                          $option{b_buffs} = 32; 
-                          copy_file(++$scount, $stotal, $source, $target, $fdtype) 
-                        },
-          '[ 64 B ]' => sub 
-                        { 
-                          $option{b_buffs} = 64; 
-                          copy_file(++$scount, $stotal, $source, $target, $fdtype) 
-                        },
-         '[ 128 B ]' => sub 
-                        { 
-                          $option{b_buffs} = 128; 
-                          copy_file(++$scount, $stotal, $source, $target, $fdtype) 
-                        },
-         '[ 256 B ]' => sub 
-                        { 
-                          $option{b_buffs} = 256; 
-                          copy_file(++$scount, $stotal, $source, $target, $fdtype) 
-                        },
-         '[ 512 B ]' => sub 
-                        { 
-                          $option{b_buffs} = 512; 
-                          copy_file(++$scount, $stotal, $source, $target, $fdtype) 
-                        },
-        '[ 1024 B ]' => sub 
-                        { 
-                          $option{b_buffs} = 1024; 
-                          copy_file(++$scount, $stotal, $source, $target, $fdtype) 
-                        },
-        '[ 2048 B ]' => sub 
-                        { 
-                          $option{b_buffs} = 2048; 
-                          copy_file(++$scount, $stotal, $source, $target, $fdtype) 
-                        },
-        '[ 4096 B ]' => sub 
-                        { 
-                          $option{b_buffs} = 4096; 
-                          copy_file(++$scount, $stotal, $source, $target, $fdtype) 
-                        },
-        '[ 8192 B ]' => sub 
-                        { 
-                          $option{b_buffs} = 8192; 
-                          copy_file(++$scount, $stotal, $source, $target, $fdtype) 
-                        },
-        '[ 8196 B ]' => sub 
-                        { 
-                          $option{b_buffs} = 8196; 
-                          copy_file(++$scount, $stotal, $source, $target, $fdtype) 
-                        },
-      }
-    );
-  }
+  # 
+  # define which buffers should be tested (in 1 bytes units)
+  #
+  @_ = 
+  (
+    #1024 ** 0         ,# 1.00 B   =           1 byte
+    #1024 ** 1 / 4     ,# 0.25 KiB =         256
+    #1024 ** 1 / 2     ,# 0.50 KiB =         512
+    1024 ** 1         ,# 1.00 KiB =        1024
+    1024 ** 2 / 4     ,# 0.25 MiB =      262144
+    1024 ** 2 / 2     ,# 0.50 MiB =      524288
+    1024 ** 2         ,# 1.00 MiB =     1048576
+    #1024 ** 3 / 4     ,# 0.25 GiB =   268435456
+    #1024 ** 3 / 2     ,# 0.50 GiB =   536870912
+    #1024 ** 3         ,# 1.00 GiB =  1073741824
+  );
+
+  $stotal = $stotal * $option{t_bench} * scalar @_; 
+  $evalcs = "copy_file(++\$scount, $stotal, \"$source\", \"$target\", $fdtype)";
+
+  cmpthese($option{t_bench}, { map {("[ $_ B]" => "\$BUFFS = $_; $evalcs")} @_ });
 }
 
 __END__
@@ -694,4 +673,5 @@ Print verbose debug information (additional flags increases detail)
 =back
 
 =cut
+
 
