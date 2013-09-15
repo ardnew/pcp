@@ -52,13 +52,14 @@ my %optional_module =
 my %option =
 (
   b_buffs => [ qw[                  buffer|b=i ], $BUFFS  ], 
-  c_cksum => [ qw[                checksum|c          0 ] ], # 0 is "default value"
+  c_cksum => [ qw[                checksum|c=s        0 ] ], # 0 is "default value"
+  d_depth => [ qw[                   depth|d=i       -1 ] ],  
   f_force => [ qw[                   force|f          0 ] ],
   h_usage => [ qw[ usage|help|what|wat|u|h|?          0 ] ],
   i_inter => [ qw[             interactive|i          0 ] ], 
   m_manpg => [ qw[             manpage|man|m          0 ] ],
   p_progr => [ qw[                progress|p          0 ] ],
-  r_recur => [ qw[                 recurse|r=i       -1 ] ],
+  r_cycle => [ qw[                     crc|r=i        0 ] ],
   s_simul => [ qw[                simulate|s          0 ] ],
   t_bench => [ qw[                    test|t=i        0 ] ],
   v_debug => [ qw[         debug|verbose|d|v+         0 ] ],
@@ -572,7 +573,7 @@ sub copy_file ($$$$$)
 
 sub test_buffers ($$$$$)
 {
-  my ($scount, $stotal, $source, $target, $fdtype, $evalcs) = @_;
+  my ($scount, $stotal, $source, $target, $fdtype, $evcode) = @_;
 
   # 
   # define which buffers should be tested (in 1 bytes units)
@@ -592,9 +593,9 @@ sub test_buffers ($$$$$)
   );
 
   $stotal = $stotal * $option{t_bench} * scalar @_; 
-  $evalcs = "copy_file(++\$scount, $stotal, \"$source\", \"$target\", $fdtype)";
+  $evcode = "copy_file(++\$scount, $stotal, \"$source\", \"$target\", $fdtype)";
 
-  cmpthese($option{t_bench}, { map {("[ $_ B]" => "\$BUFFS = $_; $evalcs")} @_ });
+  cmpthese($option{t_bench}, { map {("[ $_ B ]" => "\$BUFFS = $_; $evcode")} @_ });
 }
 
 __END__
@@ -612,15 +613,15 @@ __END__
 
 =head1 SYNOPSIS
 
-B<pccp> [ options ] [ B<-?bcdfhimpsuv> ] F<source-file> F<target-file>
+B<pccp> [ options ] [ B<-?bcdfhimprsuv> ] F<source-file> F<target-file>
 
-B<pccp> [ options ] [ B<-?bcdfhimpsuv> ] F<source-file(s)> F<target-directory>
+B<pccp> [ options ] [ B<-?bcdfhimprsuv> ] F<source-file(s)> F<target-directory>
 
 =head1 DESCRIPTION
 
 B<pccp> will perform a block-level copy on a set of files or directories from one location to another, and it can display a real-time progress indicator with checksum details of the resulting copy operation.
 
-The program does not currently support asynchronous I/O, so copy operations from one disk to another may be painfully slow.
+The program does not currently support asynchronous I/O, so copy operations from one disk to another may be slower than necessary.
 
 =head1 OPTIONS
 
@@ -628,47 +629,67 @@ The program does not currently support asynchronous I/O, so copy operations from
 
 =item B<--buffer=>F<bytes>, B<-b> F<bytes>
 
-Read and write F<bytes> of data into a buffer during copy (default: 1024)
+Read and write F<bytes> of data during the copy operation. The default buffer size B<16 KiB>.
 
-=item B<--checksum>, B<-c>
+=item B<--checksum=>F<hash>, B<-c> F<hash>
 
-Print checksum of source file and resulting copied file
+B<(NOT IMPLEMENTED)> Print checksum of source file and resulting copied file using hash function F<hash>. The following hash functions are available:
+
+  city = CityHash (32-bit)
+  md5  = MD5
+  sha  = SHA-1
+
+=item B<--crc=>F<bits>, B<-r> F<bits>
+
+B<(NOT IMPLEMENTED)> Perform a cyclic redundancy check (CRC) with a check value of size F<bits>.
+
+=item B<--depth=>F<depth>, B<-d> F<depth>
+
+B<(NOT IMPLEMENTED)> When copying a directory, do not copy files more than F<depth> levels deep.
 
 =item B<--force>, B<-f>
 
-Force copy even if destination file already exists
+Force copy even if destination file already exists or if target path (up to target file) does not exist.
 
 =item B<--help>, B<--usage>, B<--wat>, B<-h>, B<-u>, B<-w>, B<-?>
 
-Print synopsis and options to STDOUT and exit
+Print synopsis and options to STDOUT and exit.
 
 =item B<--interactive>, B<-i>
 
-Before performing each file copy, prompt the user for approval
+B<(NOT IMPLEMENTED)> Before performing each file copy, prompt the user for approval.
 
 =item B<--manpage>, B<-m>
 
-Display the manual page and exit
+Display the manual page and exit.
 
 =item B<--progress>, B<-p>
 
-Use visual indicator to show progress of copy operation
-
-=item B<--recurse=>F<depth>, B<-r> F<depth>
-
-When copying a directory, do not copy files more than F<depth> levels deep
+B<(NOT IMPLEMENTED)> Use visual indicator to show progress of copy operation.
 
 =item B<--simulate>, B<-s>
 
-Do not actually perform the copy operation, but print to STDOUT the operations that would be performed instead. (UNIX: writes to F</dev/null>)
+Do not actually perform the copy operation, but print to STDOUT the operations that would be performed instead (UNIX: writes to F</dev/null>).
 
 =item B<--test=>F<iterations>, B<-t> F<iterations>
 
-Requires F<Benchmark> (Perl 5 core module). Performs F<iterations> copy operations for each of the following buffer sizes (in bytes): 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 8196. The Benchmark module then prints a nice comparison table.
+Requires F<Benchmark> (Perl 5 core module). Performs F<iterations> copy operations for each of the following buffer sizes:
+
+         256 bytes
+         512 bytes
+        1024 bytes = 1 KiB
+      262144 bytes
+      524288 bytes
+     1048576 bytes = 1 MiB
+   268435456 bytes
+   536870912 bytes
+  1073741824 bytes = 1 GiB
+
+The Benchmark module then prints a nice comparison table.
 
 =item B<--debug>, B<--verbose>, B<-d>, B<-v>
 
-Print verbose debug information (additional flags increases detail)
+Print verbose debug information (additional flags increases detail).
 
 =back
 
