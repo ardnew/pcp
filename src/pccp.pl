@@ -21,7 +21,7 @@ our $REQMO = 1; # required module
 our $ALLOK = 0; # good
 our $ONOES = 1; # bad
 
-our $BUFFS = 16 * 1024; # default I/O byte buffer size (16 KiB)
+our $BUFFS = 512000; # default I/O byte buffer size (500 KiB = 512 KB)
 
 our $TRASH = '/dev/null'; # UNIX-only for now
 
@@ -500,9 +500,6 @@ sub copy_file ($$$$$)
     my $read; # source file "read" handle
     my $writ; # target file "write" handle
     my $buff; # byte buffer
-    my $size; # size of byte buffer
-
-    $size = $option{t_bench} ? $BUFFS : $option{b_buffs} || $BUFFS;
 
     print_message $ERROR, sprintf "cannot open file for reading: $source: $!"
       unless open $read, '<', $source;
@@ -514,34 +511,46 @@ sub copy_file ($$$$$)
     print_message $ERROR, sprintf "cannot put file in binary mode: $target: $!"
       unless binmode $writ;
 
+    my $fsize = $option{t_bench} ? $BUFFS : $option{b_buffs} || $BUFFS;
     my $rsize = -s $read || 1000;
     my $wsize = 0;
     my $width = int(log($rsize) / log(10) + 1);
-
+    my $iters = undef;
     my $cperr = undef; 
 
-    if ($option{t_bench} and ($scount - 1) % $option{t_bench} == 0)
+    if ($option{t_bench})
     {
+      my $tcount = ($scount - 1) % $option{t_bench};
+
+      if ($option{v_debug})
+      {
+        $iters = sprintf "ITERATION %d / %d", $tcount + 1, $option{t_bench};
+      }
+      elsif ($tcount == 0)
+      {
+        $iters = sprintf "ITERATIONS %d", $option{t_bench};
+      }
+
       print_message $GINFO,
-        sprintf 
-          "[ TEST %*d / %*d | %*d bytes | %d byte buffer | %d iterations ] %s -> %s", 
-        $cwidth, $scount, $cwidth, $stotal, $cwidth, $rsize, 
-          $size, $option{t_bench}, $source, $target;
+        sprintf "[ TEST %*d / %*d | SIZE %*d bytes | BUFFER %d bytes | %s ] %s -> %s",
+          $cwidth, $scount, $cwidth, $stotal, $cwidth, $rsize, $fsize, $iters, 
+          $source, $target unless not defined $iters;
+
     }
     elsif ($option{s_simul} or $option{v_debug} )
     {
       print_message $NOTIC, 
         sprintf 
-          "[ FILE %*d / %*d | %*d bytes | %d byte buffer ] %s -> %s", 
-        $cwidth, $scount, $cwidth, $stotal, $cwidth, $rsize,
-          $size, $source, $target;
+          "[ FILE %*d / %*d | SIZE %*d bytes | BUFFER %d bytes ] %s -> %s", 
+        $cwidth, $scount, $cwidth, $stotal, $cwidth, $rsize, $fsize, 
+        $source, $target;
     }
 
     {
       my ($r, $w, $t) = (0, 0, 0);
 
       $cperr = sprintf "sysread(): cannot read file: $source: $!" and last
-        unless defined ($r = sysread $read, $buff, $size);
+        unless defined ($r = sysread $read, $buff, $fsize);
 
       last unless $r;
 
@@ -562,7 +571,7 @@ sub copy_file ($$$$$)
       redo;
     }
 
-    print $/ if $option{v_debug} > 2;
+    print $/ if $option{v_debug} > 2 and $wsize > 0;
 
     close $writ;
     close $read;
@@ -580,16 +589,21 @@ sub test_buffers ($$$$$)
   #
   @_ = 
   (
-    #1024 ** 0         ,# 1.00 B   =           1 byte
-    #1024 ** 1 / 4     ,# 0.25 KiB =         256
-    #1024 ** 1 / 2     ,# 0.50 KiB =         512
-    1024 ** 1         ,# 1.00 KiB =        1024
-    1024 ** 2 / 4     ,# 0.25 MiB =      262144
-    1024 ** 2 / 2     ,# 0.50 MiB =      524288
-    1024 ** 2         ,# 1.00 MiB =     1048576
-    #1024 ** 3 / 4     ,# 0.25 GiB =   268435456
-    #1024 ** 3 / 2     ,# 0.50 GiB =   536870912
-    #1024 ** 3         ,# 1.00 GiB =  1073741824
+    #1024 ** 0             ,# 1.00 B   =           1 byte
+    #1024 ** 1 / 4         ,# 0.25 KiB =         256
+    #1024 ** 1 / 2         ,# 0.50 KiB =         512
+    1024 ** 1             ,# 1.00 KiB =        1024
+    1024 ** 2 / 4         ,# 0.25 MiB =      262144
+    1024 ** 2 / 3.2       ,# 0.31 MiB =      327680
+    1024 ** 2 / 2.048     ,# 0.49 MiB =      512000
+    1024 ** 2 / 2         ,# 0.50 MiB =      524288
+    1024 ** 2 / 1.6       ,# 0.63 MiB =      655360
+    1024 ** 2 / 1.31072   ,# 0.76 MiB =      800000
+    1024 ** 2 / 1.024     ,# 0.98 MiB =     1024000
+    1024 ** 2             ,# 1.00 MiB =     1048576
+    #1024 ** 3 / 4         ,# 0.25 GiB =   268435456
+    #1024 ** 3 / 2         ,# 0.50 GiB =   536870912
+    #1024 ** 3             ,# 1.00 GiB =  1073741824
   );
 
   $stotal = $stotal * $option{t_bench} * scalar @_; 
@@ -633,7 +647,7 @@ Read and write F<bytes> of data during the copy operation. The default buffer si
 
 =item B<--checksum=>F<hash>, B<-c> F<hash>
 
-B<(NOT IMPLEMENTED)> Print checksum of source file and resulting copied file using hash function F<hash>. The following hash functions are available:
+B<(NOT IMPLEMENTED)> Print checksum of source file and resulting copied file using hash function F<hash>. The following functions are available:
 
   city = CityHash (32-bit)
   md5  = MD5
@@ -685,11 +699,11 @@ Requires F<Benchmark> (Perl 5 core module). Performs F<iterations> copy operatio
    536870912 bytes
   1073741824 bytes = 1 GiB
 
-The Benchmark module then prints a nice comparison table.
+The F<Benchmark> module then prints a nice comparison table.
 
 =item B<--debug>, B<--verbose>, B<-d>, B<-v>
 
-Print verbose debug information (additional flags increases detail).
+Print verbose debug information (additional flags increases level of detail).
 
 =back
 

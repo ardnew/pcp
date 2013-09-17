@@ -7,14 +7,11 @@ Mac OS X 10.8.4, but any version of Perl 5 will work.
 
 The following Perl modules are required:
 
-  Getopt::Long
-  Pod::Usage
-  File::Find
-  File::Spec
+  TBD
 
 And the following are optional:
 
-  Term::ReadKey
+  TBD
 
 All of these packages are available for free from the CPAN
 module archive (http://www.cpan.org/).
@@ -29,8 +26,8 @@ module archive (http://www.cpan.org/).
 you can enable execute permissions and copy the file to a 
 directory in your user's shell PATH:
 
-  > chmod +x pccp-VERSION.pl
-  > cp pccp-VERSION.pl /usr/local/bin
+  > chmod +x pccp.pl
+  > cp pccp.pl /usr/local/bin
 
   To see what directories are in your PATH:
 
@@ -40,12 +37,12 @@ directory in your user's shell PATH:
   when installing the script system-wide:
 
     > cd /usr/local/bin
-    > mv pccp-VERSION.pl pccp
+    > mv pccp.pl pccp
 
       - OR -
     
     > cd /usr/local/bin
-    > ln -s pccp-VERSION.pl pccp
+    > ln -s pccp.pl pccp
 
 ============================================================
                                                       USAGE
@@ -53,7 +50,7 @@ directory in your user's shell PATH:
 
 To view the built-in POD-generated man page:
 
-  > perl pccp-VERSION.pl --manpage
+  > perl pccp.pl --manpage
 
 ============================================================
                                                     CONTACT
