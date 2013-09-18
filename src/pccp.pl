@@ -23,6 +23,9 @@ our $ONOES = 1; # bad
 
 our $BUFFS = 512000; # default I/O byte buffer size (500 KiB = 512 KB)
 
+our $IOCTL = 'sys/ioctl.ph'; # Perl header file for Term::ReadKey fallback ioctl
+our $DEFTW = 60; # default terminal width if Term::ReadKey and ioctl aren't available
+
 our $TRASH = '/dev/null'; # UNIX-only for now
 
 
@@ -37,10 +40,7 @@ my %bootstrp_module = # these modules are needed for bootstrapping other feature
 
 my %required_module =
 (
-  'File::Find'      => [ qw[] ],
   'File::Path'      => [ qw[] ],
-  'File::Spec'      => [ qw[] ],
-  'File::Copy'      => [ qw[] ],
 );
 
 my %optional_module =
@@ -51,18 +51,18 @@ my %optional_module =
 
 my %option =
 (
-  b_buffs => [ qw[                  buffer|b=i ], $BUFFS  ], 
-  c_cksum => [ qw[                checksum|c=s        0 ] ], # 0 is "default value"
-  d_depth => [ qw[                   depth|d=i       -1 ] ],  
-  f_force => [ qw[                   force|f          0 ] ],
-  h_usage => [ qw[ usage|help|what|wat|u|h|?          0 ] ],
-  i_inter => [ qw[             interactive|i          0 ] ], 
-  m_manpg => [ qw[             manpage|man|m          0 ] ],
-  p_progr => [ qw[                progress|p          0 ] ],
-  r_cycle => [ qw[                     crc|r=i        0 ] ],
-  s_simul => [ qw[                simulate|s          0 ] ],
-  t_bench => [ qw[                    test|t=i        0 ] ],
-  v_debug => [ qw[         debug|verbose|d|v+         0 ] ],
+  b_buffs => [ qw[                     buffer|b=i ],   $BUFFS   ], 
+  c_cksum => [ qw[                   checksum|c=s           0 ] ], # 0 is "default value"
+  d_depth => [ qw[                      depth|d=i          -1 ] ],  
+  f_force => [ qw[                      force|f             0 ] ],
+  h_usage => [ qw[    usage|help|what|wat|u|h|?             0 ] ],
+  i_inter => [ qw[                interactive|i             0 ] ], 
+  m_manpg => [ qw[                manpage|man|m             0 ] ],
+  p_progr => [ qw[                   progress|p             0 ] ],
+  r_cycle => [ qw[                        crc|r=i           0 ] ],
+  s_simul => [ qw[                   simulate|s             0 ] ],
+  t_bench => [ qw[                       test|t=i           0 ] ],
+  v_debug => [ qw[            debug|verbose|d|v+            0 ] ],
 );
 
 my %pod =
@@ -135,6 +135,12 @@ sub show_modules ($$$);
 sub parse_options ($);
 
 #
+# performs some pre-processing for optional modules after options have been parsed
+# but before any file processing occurs
+#
+sub configure;
+
+#
 # runs pod2usage showing the specified sections and then exits program
 #
 # arg1: program return code
@@ -175,8 +181,9 @@ sub prepare_copy ($$@);
 # arg3: source file
 # arg4: target file
 # arg5: target file type
+# arg6: terminal width (in chars), undef if user did not enable option
 #
-sub copy_file ($$$$$);
+sub copy_file ($$$$$$);
 
 #
 # uses Benchmark module to compare timings of sub copy_file with various buffer sizes
@@ -186,8 +193,22 @@ sub copy_file ($$$$$);
 # arg3: source file
 # arg4: target file
 # arg5: target file type
+# arg6: terminal width (in chars), undef if user did not enable option
 #
-sub test_buffers ($$$$$);
+sub test_buffers ($$$$$$);
+
+#
+# computes the terminal width (in chars) using Term::ReadKey. if Term::ReadKey does not
+# exist, then ioctl is used instead. if ioctl is also not found, returns a width = $DEFTW
+#
+sub get_terminal_width;
+
+#
+# arg1: ratio of completion progress
+# arg2: terminal width (in chars)
+# arg3: filehandle for output
+#
+sub show_progress ($$$);
 
 
 ####[ main line ]#########################################################################
@@ -201,11 +222,15 @@ load_modules $OPTMO, \%optional_module;
 pod $ALLOK, "manpage" if $option{m_manpg};
 pod $ALLOK, "usage" if $option{h_usage};
 
+configure;
+
 my ($target, $fdtype, @source) = parse_filenames reverse @ARGV;
 
 prepare_copy $target, $fdtype, @source;
 
 my ($scount, $stotal) = (0, scalar @source);
+
+my ($termsz) = $option{p_progr} ? get_terminal_width : undef;
 
 for my $srccur (@source)
 {
@@ -214,11 +239,11 @@ for my $srccur (@source)
 
   if ($option{t_bench})
   {
-    test_buffers($scount, $stotal, $srccur, $target, $fdtype)
+    test_buffers($scount, $stotal, $srccur, $target, $fdtype, $termsz)
   }
   else
   {
-    copy_file(++$scount, $stotal, $srccur, $target, $fdtype);
+    copy_file(++$scount, $stotal, $srccur, $target, $fdtype, $termsz);
   }
 }
 
@@ -234,7 +259,7 @@ sub init
   parse_options \%option;
 
   print_message $ERROR, "module not found: Benchmark is required for I/O buffer tests"
-    unless not $option{t_bench} or exists $optional_module{Benchmark};
+    unless not $option{t_bench} or exists $optional_module{'Benchmark'};
 
   print_message $WARNG, "specified buffer too small: $option{b_buffs}: using $BUFFS"
     and $option{b_buffs} = $BUFFS unless $option{b_buffs} > 0;
@@ -354,6 +379,12 @@ sub parse_options ($)
     }
     printf "%9s = (%-s)$/$/", 'args', join(', ', @ARGV);
   }  
+}
+
+sub configure
+{
+  print_message $NOTIC, 'using ioctl instead of Term::ReadKey'
+    unless not $option{p_progr} or exists $optional_module{'Term::ReadKey'};
 }
 
 sub pod ($$)
@@ -477,9 +508,9 @@ sub prepare_copy ($$@)
   }  
 }
 
-sub copy_file ($$$$$)
+sub copy_file ($$$$$$)
 {
-  my ($scount, $stotal, $source, $target, $fdtype) = @_;
+  my ($scount, $stotal, $source, $target, $fdtype, $termsz) = @_;
 
   my $cwidth = int(log($stotal) / log(10) + 1); # log10($stotal)+1 = number of digits
 
@@ -546,8 +577,9 @@ sub copy_file ($$$$$)
         $source, $target;
     }
 
+
     {
-      my ($r, $w, $t) = (0, 0, 0);
+      my ($r, $w, $t, $p) = (0, 0, 0, 0);
 
       $cperr = sprintf "sysread(): cannot read file: $source: $!" and last
         unless defined ($r = sysread $read, $buff, $fsize);
@@ -561,17 +593,32 @@ sub copy_file ($$$$$)
 
         $wsize += $t;
 
-        if ($option{v_debug} > 2)
+        $p = $wsize / $rsize;
+
+        if (defined $termsz)
         {
-          printf "      [ %*d / %*d ] ( %6.2f%% )$/", 
-            $width, $wsize, $width, $rsize, $wsize / $rsize * 100.0;
+          show_progress($p, $termsz, \*STDOUT);
+        }
+        else
+        {
+          if ($option{v_debug} > 2)
+          {
+            printf "      [ %*d / %*d ] ( %6.2f%% )$/", 
+              $width, $wsize, $width, $rsize, $p * 100.0;
+          }
         }
       }
 
       redo;
     }
 
-    print $/ if $option{v_debug} > 2 and $wsize > 0;
+    select \*STDOUT if defined $termsz;
+
+    if ($wsize > 0)
+    {
+      if ($option{p_progr}) { print "$/$/" }
+                       else { print "$/" if ($option{v_debug} > 2 ) };
+    }
 
     close $writ;
     close $read;
@@ -580,9 +627,9 @@ sub copy_file ($$$$$)
   }
 }
 
-sub test_buffers ($$$$$)
+sub test_buffers ($$$$$$)
 {
-  my ($scount, $stotal, $source, $target, $fdtype, $evcode) = @_;
+  my ($scount, $stotal, $source, $target, $fdtype, $evcode, $termsz) = @_;
 
   # 
   # define which buffers should be tested (in 1 bytes units)
@@ -607,9 +654,68 @@ sub test_buffers ($$$$$)
   );
 
   $stotal = $stotal * $option{t_bench} * scalar @_; 
-  $evcode = "copy_file(++\$scount, $stotal, \"$source\", \"$target\", $fdtype)";
+  $evcode = "copy_file(++\$scount, $stotal, \"$source\", \"$target\", $fdtype, \$termsz)";
 
   cmpthese($option{t_bench}, { map {("[ $_ B ]" => "\$BUFFS = $_; $evcode")} @_ });
+}
+
+sub get_terminal_width
+{
+  my ($wchar, $hchar, $wpixl, $hpixl) = (0, 0, 0, 0);
+
+  if (exists $optional_module{'Term::ReadKey'})
+  {
+    ($wchar, $hchar, $wpixl, $hpixl) = @_ 
+      if 0 < scalar (@_ = Term::ReadKey::GetTerminalSize());
+  }
+  else
+  {
+    if (eval "require \'$IOCTL\'; 1")
+    {
+      my $wins =         ''; # buffer for ioctl returned struct
+      my $ttyd = '/dev/tty'; # path to default TTY device
+      my $ttyh;              # file handle for $ttyd
+
+      print_message $ERROR, "constant TIOCGWINSZ not found in ioctl"
+        unless defined &TIOCGWINSZ;
+
+      print_message $ERROR, "cannot open: $ttyd: $!"
+        unless open $ttyh, '+<', $ttyd;
+
+      print_message $ERROR, sprintf 'ioctl TIOCGWINSZ (%08x: %s)', &TIOCGWINSZ, $!
+        unless ioctl $ttyh, &TIOCGWINSZ, $wins;
+
+      ($wchar, $hchar, $wpixl, $hpixl) = unpack('S4', $wins);      
+    }
+    else
+    {
+      print_message $NOTIC, "header not found: \'$IOCTL\'";
+      print_message $NOTIC, 'using terminal width of 60 chars';
+
+      $wchar = $DEFTW;
+    }
+  }
+
+  return $wchar;
+}
+
+sub show_progress ($$$)
+{
+  my ($cr, $tw, $fh) = @_;
+
+  my $cf = select($fh); 
+       $_= $|; 
+       $|=  1;
+       $|= $_;
+       select($_);
+
+  my $as = ~~($tw - 16);    # entire space for progress bar (subtract details)
+  my $pr = ~~($cr * 100);  # percent complete
+  my $ns = $cr * $as;      # symbol count
+  my $ni = '*' x $ns;      # progress bar symbols
+  my $rs = $as - $ns;      # remaining space for progress bar  
+
+  printf $fh "\r[%-*s] %s", $as, $ni, $pr >= 100 ? "(done)" : "$pr%";
 }
 
 __END__
@@ -643,7 +749,7 @@ The program does not currently support asynchronous I/O, so copy operations from
 
 =item B<--buffer=>F<bytes>, B<-b> F<bytes>
 
-Read and write F<bytes> of data during the copy operation. The default buffer size B<16 KiB>.
+Read and write F<bytes> of data during the copy operation. The default buffer size B<500 KiB> (B<512 KB>).
 
 =item B<--checksum=>F<hash>, B<-c> F<hash>
 
@@ -689,15 +795,15 @@ Do not actually perform the copy operation, but print to STDOUT the operations t
 
 Requires F<Benchmark> (Perl 5 core module). Performs F<iterations> copy operations for each of the following buffer sizes:
 
-         256 bytes
-         512 bytes
-        1024 bytes = 1 KiB
-      262144 bytes
-      524288 bytes
-     1048576 bytes = 1 MiB
-   268435456 bytes
-   536870912 bytes
-  1073741824 bytes = 1 GiB
+     1024 bytes = 1.0 KiB
+   262144 bytes
+   327680 bytes
+   512000 bytes = default
+   524288 bytes = 0.5 MiB
+   655360 bytes
+   800000 bytes
+  1024000 bytes
+  1048576 bytes = 1.0 MiB
 
 The F<Benchmark> module then prints a nice comparison table.
 
