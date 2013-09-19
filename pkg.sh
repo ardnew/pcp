@@ -6,7 +6,12 @@ VERS='0.1'
 ROOT=`pwd`
 cd "`dirname $0`"
 
-LABL="${VERS}-r"`svnversion -n`
+# use this one to hide any SVN version modifiers (e.g. 'M','S','P')
+#LABL="${VERS}-r"`svnversion -n | sed -e 's/^[0-9]*:\([0-9]*\)[^0-9]*/\1/'`
+
+# i like to keep them so that i dont forget to commit any changes
+LABL="${VERS}-r"`svnversion -n | sed -e 's/^[0-9]*://'`
+
 DIST="${NAME}-${LABL}"
 HOLD="${DIST}-publish"
 
