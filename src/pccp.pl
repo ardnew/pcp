@@ -607,7 +607,7 @@ sub copy_file ($$$$$$)
       redo;
     }
 
-    if ($wsize > 0)
+    if ($wsize > 0 and not $option{t_bench})
     {
       print $/ if $option{v_debug} > 2  or $option{p_progr};
       print $/ if $option{v_debug} > 0 and $option{p_progr};
