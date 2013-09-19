@@ -23,8 +23,8 @@ our $ONOES = 1; # bad
 
 our $BUFFS = 512000; # default I/O byte buffer size (500 KiB = 512 KB)
 
-our $IOCTL = 'sys/ioctl.ph'; # Perl header file for Term::ReadKey fallback ioctl
-our $DEFTW = 60; # default terminal width if Term::ReadKey and ioctl aren't available
+our $MINTW =  7; # minimum possible width of progress bar (in chars)
+our $DEFTW = 60; # default terminal width if Term::ReadKey isn't available
 
 our $TRASH = '/dev/null'; # UNIX-only for now
 
@@ -45,7 +45,7 @@ my %required_module =
 
 my %optional_module =
 (
-  'Term::ReadKey'   => [ qw[] ],
+  'Term::ReadxKey'   => [ qw[] ],
   'Benchmark'       => [ qw[ :all ] ],
 );
 
@@ -64,6 +64,7 @@ my %option =
   s_simul => [ qw[                   simulate|s             0 ] ],
   t_bench => [ qw[                       test|t=i           0 ] ],
   v_debug => [ qw[            debug|verbose|d|v+            0 ] ],
+  w_width => [ qw[                      width|w=i           0 ] ],
 );
 
 my %pod =
@@ -199,8 +200,8 @@ sub copy_file ($$$$$$);
 sub test_buffers ($$$$$$);
 
 #
-# computes the terminal width (in chars) using Term::ReadKey. if Term::ReadKey does not
-# exist, then ioctl is used instead. if ioctl is also not found, returns a width = $DEFTW
+# returns the argument passed to --width (if given). otherwise, uses (in order of
+# availability): Term::ReadKey and then $DEFTW
 #
 sub get_terminal_width;
 
@@ -384,10 +385,7 @@ sub parse_options ($)
 
 sub configure
 {
-  print_message $NOTIC, 'using ioctl instead of Term::ReadKey'
-    unless not $option{p_progr} or exists $optional_module{'Term::ReadKey'};
-
-  $option{p_progr} = $option{p_progr} && not $option{q_quiet};
+  $option{p_progr} = !!($option{p_progr} and not $option{q_quiet});
 }
 
 sub pod ($$)
@@ -658,37 +656,18 @@ sub get_terminal_width
 {
   my ($wchar, $hchar, $wpixl, $hpixl) = (0, 0, 0, 0);
 
-  if (exists $optional_module{'Term::ReadKey'})
+  if ($option{w_width})
+  {
+    $wchar = $option{w_width} < $MINTW ? $MINTW : $option{w_width};
+  }
+  elsif (exists $optional_module{'Term::ReadKey'})
   {
     ($wchar, $hchar, $wpixl, $hpixl) = @_ 
       if 0 < scalar (@_ = Term::ReadKey::GetTerminalSize());
   }
   else
   {
-    if (eval "require \'$IOCTL\'; 1")
-    {
-      my $wins =         ''; # buffer for ioctl returned struct
-      my $ttyd = '/dev/tty'; # path to default TTY device
-      my $ttyh;              # file handle for $ttyd
-
-      print_message $ERROR, "constant TIOCGWINSZ not found in ioctl"
-        unless defined &TIOCGWINSZ;
-
-      print_message $ERROR, "cannot open: $ttyd: $!"
-        unless open $ttyh, '+<', $ttyd;
-
-      print_message $ERROR, sprintf 'ioctl TIOCGWINSZ (%08x: %s)', &TIOCGWINSZ, $!
-        unless ioctl $ttyh, &TIOCGWINSZ, $wins;
-
-      ($wchar, $hchar, $wpixl, $hpixl) = unpack('S4', $wins);      
-    }
-    else
-    {
-      print_message $NOTIC, "header not found: \'$IOCTL\'";
-      print_message $NOTIC, 'using terminal width of 60 chars';
-
-      $wchar = $DEFTW;
-    }
+    $wchar = $DEFTW;
   }
 
   return $wchar;
@@ -704,11 +683,11 @@ sub show_progress ($$$)
        $|= $_;
        select($_);
 
-  my $as = ~~($tw - 7);    # entire space for progress bar (subtract details)
-  my $pr = ~~($cr * 100);  # percent complete
-  my $ns = $cr * $as;      # symbol count
-  my $ni = '*' x $ns;      # progress bar symbols
-  my $rs = $as - $ns;      # remaining space for progress bar  
+  my $as = ~~($tw - $MINTW); # entire space for progress bar (subtract details)
+  my $pr = ~~($cr * 100);    # percent complete
+  my $ns = $cr * $as;        # symbol count
+  my $ni = '*' x $ns;        # progress bar symbols
+  my $rs = $as - $ns;        # remaining space for progress bar  
 
   printf $fh "\r[%-*s] %4s", $as, $ni, $pr >= 100 ? "done" : "$pr%";
 
@@ -731,9 +710,9 @@ __END__
 
 =head1 SYNOPSIS
 
-B<pccp> [ options ] [ B<-?bcdfhimpqrsuv> ] F<source-file> F<target-file>
+B<pccp> [ options ] [ B<-?bcdfhimpqrsuvw> ] F<source-file> F<target-file>
 
-B<pccp> [ options ] [ B<-?bcdfhimpqrsuv> ] F<source-file(s)> F<target-directory>
+B<pccp> [ options ] [ B<-?bcdfhimpqrsuvw> ] F<source-file(s)> F<target-directory>
 
 =head1 DESCRIPTION
 
@@ -818,6 +797,10 @@ The F<Benchmark> module then prints a nice comparison table detailing the I/O pe
 =item B<--debug>, B<--verbose>, B<-d>, B<-v>
 
 Print verbose debug information (additional flags increases level of detail).
+
+=item B<--width=>F<width>, B<-w> F<width>
+
+Use a progress bar with length of F<width> chars.
 
 =back
 
