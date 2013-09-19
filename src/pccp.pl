@@ -45,7 +45,7 @@ my %required_module =
 
 my %optional_module =
 (
-  'Term::ReadxKey'   => [ qw[] ],
+  'Term::ReadKey'   => [ qw[] ],
   'Benchmark'       => [ qw[ :all ] ],
 );
 
