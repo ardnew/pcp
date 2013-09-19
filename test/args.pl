@@ -74,7 +74,7 @@ sub dotest
     }
   }
 
-  my $cmd = "perl \"$PCCP_PATH\" -vvf @a";
+  my $cmd = "perl \"$PCCP_PATH\" -vv @a";
 
   $cmd = "$cmd 2>&1" if $REDIR_ERR;
 
@@ -82,7 +82,6 @@ sub dotest
 
   print $/, $/;
 }    
-
 
 print `rm -rf \"$BF\"$/`;
 print "#" x 100, $/, $/;
@@ -110,8 +109,6 @@ my $testcount = 0;
 @_ = split /\s+/, "$SF_1    $FN    $SF_2    $FE    $TF    $FN"  ; dotest(++$testcount, @_); 
 @_ = split /\s+/, "$SF_1    $FN    $SF_2    $FE    $TD    $DN"  ; dotest(++$testcount, @_); 
 
-
-
 @_ = split /\s+/, "$SD_1    $DE    $TF      $FE"                ; dotest(++$testcount, @_);
 @_ = split /\s+/, "$SD_1    $DE    $TD      $DE"                ; dotest(++$testcount, @_);
 @_ = split /\s+/, "$SD_1    $DE    $TF      $FN"                ; dotest(++$testcount, @_);
@@ -132,3 +129,5 @@ my $testcount = 0;
 @_ = split /\s+/, "$SD_1    $DN    $SD_2    $FE    $TD    $DE"  ; dotest(++$testcount, @_);
 @_ = split /\s+/, "$SD_1    $DN    $SD_2    $FE    $TF    $FN"  ; dotest(++$testcount, @_);
 @_ = split /\s+/, "$SD_1    $DN    $SD_2    $FE    $TD    $DN"  ; dotest(++$testcount, @_);
+
+print `rm -rf \"$BF\"$/`;

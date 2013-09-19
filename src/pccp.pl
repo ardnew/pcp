@@ -485,24 +485,18 @@ sub prepare_copy ($$@)
 
     my ($srcdir, $tardir) = map { File::Basename::dirname($_) } ($srccur, $tarcur);
 
-    print_message $ERROR, "cannot copy: file exists: $tarcur (use --force)"
-      unless not -f $tarcur or $option{f_force};
-    print_message $ERROR, "cannot overwrite file: $tarcur: $!"
-      unless not -f $tarcur or unlink $tarcur;  
+    for my $tarrem ($tarcur, $tardir)
+    {
+      next unless -f $tarrem;
 
-    print_message $ERROR, "cannot copy: file exists: $tardir (use --force)"
-      unless not -f $tardir or $option{f_force};
-    print_message $ERROR, "cannot overwrite file: $tardir: $!"
-      unless not -f $tardir or unlink $tardir;        
-
-    print_message $ERROR, 
-      sprintf "invalid path: directory does not exist: $tardir[$DIR] ".
-              "(use --force to create directory)"
-        unless -d $tardir[$DIR] or $option{f_force};
+      print_message $ERROR, "cannot copy: file exists: $tarrem (use --force)"
+        unless $option{f_force};
+      print_message $ERROR, "cannot overwrite file: $tarrem: $!"
+        unless unlink $tarcur;        
+    }
 
     print_message $ERROR, sprintf "cannot create directory: $tardir[$DIR]: $!"
       unless -d $tardir[$DIR] or File::Path::mkpath($tardir[$DIR]);
-
     print_message $ERROR, sprintf "invalid path: cannot write to directory: $tardir[$DIR]"
       unless -w $tardir[$DIR];
   }  
@@ -612,12 +606,10 @@ sub copy_file ($$$$$$)
       redo;
     }
 
-    select \*STDOUT if defined $termsz;
-
     if ($wsize > 0)
     {
-      if ($option{p_progr}) { print "$/$/" }
-                       else { print "$/" if ($option{v_debug} > 2 ) };
+      print $/ if $option{v_debug} > 2  or $option{p_progr};
+      print $/ if $option{v_debug} > 0 and $option{p_progr};
     }
 
     close $writ;
@@ -709,13 +701,16 @@ sub show_progress ($$$)
        $|= $_;
        select($_);
 
-  my $as = ~~($tw - 16);    # entire space for progress bar (subtract details)
+  my $as = ~~($tw - 7);    # entire space for progress bar (subtract details)
   my $pr = ~~($cr * 100);  # percent complete
   my $ns = $cr * $as;      # symbol count
   my $ni = '*' x $ns;      # progress bar symbols
   my $rs = $as - $ns;      # remaining space for progress bar  
 
-  printf $fh "\r[%-*s] %s", $as, $ni, $pr >= 100 ? "(done)" : "$pr%";
+  printf $fh "\r[%-*s] %4s", $as, $ni, $pr >= 100 ? "done" : "$pr%";
+
+  # STDOUT gets closed after flush, so we need to reopen it for our caller
+  select \*STDOUT if defined $termsz;  
 }
 
 __END__
