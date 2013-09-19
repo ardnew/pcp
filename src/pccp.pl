@@ -770,7 +770,7 @@ Disable progress indicator. This is a synonym for B<--noprogress>.
 
 =over 4
 
-B<NOTE>: This option does not suppress all output. Details from B<--verbose> and B<--test> will still be printed.
+B<NOTE>: This option does not suppress all output. Details from B<--verbose> and B<--test> will still be printed if enabled.
 
 =back
 
