@@ -58,7 +58,8 @@ my %option =
   h_usage => [ qw[    usage|help|what|wat|u|h|?             0 ] ],
   i_inter => [ qw[                interactive|i             0 ] ], 
   m_manpg => [ qw[                manpage|man|m             0 ] ],
-  p_progr => [ qw[                   progress|p             0 ] ],
+  p_progr => [ qw[                   progress|p!            1 ] ],
+  q_quiet => [ qw[                      quiet|q             0 ] ],
   r_cycle => [ qw[                        crc|r=i           0 ] ],
   s_simul => [ qw[                   simulate|s             0 ] ],
   t_bench => [ qw[                       test|t=i           0 ] ],
@@ -385,6 +386,8 @@ sub configure
 {
   print_message $NOTIC, 'using ioctl instead of Term::ReadKey'
     unless not $option{p_progr} or exists $optional_module{'Term::ReadKey'};
+
+  $option{p_progr} = $option{p_progr} && not $option{q_quiet};
 }
 
 sub pod ($$)
@@ -728,15 +731,15 @@ __END__
 
 =head1 SYNOPSIS
 
-B<pccp> [ options ] [ B<-?bcdfhimprsuv> ] F<source-file> F<target-file>
+B<pccp> [ options ] [ B<-?bcdfhimpqrsuv> ] F<source-file> F<target-file>
 
-B<pccp> [ options ] [ B<-?bcdfhimprsuv> ] F<source-file(s)> F<target-directory>
+B<pccp> [ options ] [ B<-?bcdfhimpqrsuv> ] F<source-file(s)> F<target-directory>
 
 =head1 DESCRIPTION
 
 B<pccp> will perform a block-level copy on a set of files or directories from one location to another, and it can display a real-time progress indicator with checksum details of the resulting copy operation.
 
-The program does not currently support asynchronous I/O, so copy operations from one disk to another may be slower than necessary.
+The program does not currently support asynchronous I/O, so copy operations from one disk to another may be stupid slow.
 
 =head1 OPTIONS
 
@@ -744,15 +747,15 @@ The program does not currently support asynchronous I/O, so copy operations from
 
 =item B<--buffer=>F<bytes>, B<-b> F<bytes>
 
-Read and write F<bytes> of data during the copy operation. The default buffer size B<500 KiB> (B<512 KB>).
+Read and write F<bytes> of data during the copy operation. The default buffer size is B<500 KiB> (B<512 KB>).
 
 =item B<--checksum=>F<hash>, B<-c> F<hash>
 
 B<(NOT IMPLEMENTED)> Print checksum of source file and resulting copied file using hash function F<hash>. The following functions are available:
 
-  city = CityHash (32-bit)
-  md5  = MD5
-  sha  = SHA-1
+    city = CityHash (32-bit)
+    md5  = MD5
+    sha  = SHA-1
 
 =item B<--crc=>F<bits>, B<-r> F<bits>
 
@@ -764,7 +767,7 @@ B<(NOT IMPLEMENTED)> When copying a directory, do not copy files more than F<dep
 
 =item B<--force>, B<-f>
 
-Force copy even if destination file already exists or if target path (up to target file) does not exist.
+Force copy even if destination file already exists.
 
 =item B<--help>, B<--usage>, B<--wat>, B<-h>, B<-u>, B<-w>, B<-?>
 
@@ -780,7 +783,17 @@ Display the manual page and exit.
 
 =item B<--progress>, B<-p>
 
-B<(NOT IMPLEMENTED)> Use visual indicator to show progress of copy operation.
+Use visual indicator to show progress of copy operation. Currently uses a progress bar, but a sweet ASCII graphic of a shark attacking a man is in work. Use B<--noprogress>, B<--quiet>, or B<-q> to disable.
+
+=item B<--quiet>, B<-q>
+
+Disable progress indicator. This is a synonym for B<--noprogress>. 
+
+=over 4
+
+B<NOTE>: This option does not suppress all output. Details from B<--verbose> and B<--test> will still be printed.
+
+=back
 
 =item B<--simulate>, B<-s>
 
@@ -800,7 +813,7 @@ Requires F<Benchmark> (Perl 5 core module). Performs F<iterations> copy operatio
   1024000 bytes
   1048576 bytes = 1.0 MiB
 
-The F<Benchmark> module then prints a nice comparison table.
+The F<Benchmark> module then prints a nice comparison table detailing the I/O performance of each buffer.
 
 =item B<--debug>, B<--verbose>, B<-d>, B<-v>
 
