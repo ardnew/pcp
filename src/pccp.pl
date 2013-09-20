@@ -25,7 +25,7 @@ our $ONOES = 1; # bad
 
 our $BUFFS = 512000; # default I/O byte buffer size (500 KiB = 512 KB)
 
-our $FILEW = 24; # width of the filename window (chars)
+our $FILEW = 14; # width of the filename window (chars)
 our $PCTGW =  6; # width of the percentage string (chars)
 our $PBARW =  4; # minimum width required for progress bar (chars)
 our $MINSW = $FILEW + $PCTGW; # width of required status details (chars)
