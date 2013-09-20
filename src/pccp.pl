@@ -732,7 +732,7 @@ sub show_progress ($$$$$$$)
   if ($sl > $FILEW - 2)
   {
     $sl += 5;
-    $sr .= ' <=> ';
+    $sr .= ' --- ';
 
     $rn = int($es * 4) % $sl;
     $sr = substr($sr, $rn) . substr($sr, 0, $rn);
