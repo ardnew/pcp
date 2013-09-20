@@ -7,6 +7,9 @@ use warnings;
 ####[ globals ]###########################################################################
 
 
+our $PVERS = 'pccp version 0.1'; # version string printed in verbose mode
+our $PAUTH = 'andrew@ardnew.com';
+
 our $GINFO = 0; # "general" message level
 our $NOTIC = 1; # "notice" (only prints if -v)
 our $WARNG = 2; # "warning"
@@ -23,7 +26,12 @@ our $ONOES = 1; # bad
 
 our $BUFFS = 512000; # default I/O byte buffer size (500 KiB = 512 KB)
 
-our $MINTW =  7; # minimum possible width of progress bar (in chars)
+our $FILEW = 18; # width of the filename window (chars)
+our $PCTGW =  6; # width of the percentage string (chars)
+our $PBARW =  4; # minimum width required for progress bar (chars)
+our $MINSW = $FILEW + $PCTGW; # width of required status details (chars)
+our $MINTW = $MINSW + $PBARW; # minimum terminal width required for progess bar (chars)
+
 our $DEFTW = 60; # default terminal width if Term::ReadKey isn't available
 
 our $TRASH = '/dev/null'; # UNIX-only for now
@@ -46,7 +54,8 @@ my %required_module =
 my %optional_module =
 (
   'Term::ReadKey'   => [ qw[] ],
-  'Benchmark'       => [ qw[ :all ] ],
+  'Time::HiRes'     => [ qw[ gettimeofday tv_interval ] ],
+  'Benchmark'       => [ qw[ cmpthese ] ],
 );
 
 my %option =
@@ -206,11 +215,26 @@ sub test_buffers ($$$$$$);
 sub get_terminal_width;
 
 #
-# arg1: ratio of completion progress
-# arg2: terminal width (in chars)
-# arg3: filehandle for output
+# arg1: bytes written
+# arg2: total bytes in file
+# arg3: time elapsed since copy began (in microseconds)
+# arg4: terminal width (in chars)
+# arg5: filehandle for output
+# arg6: filename string for file window
+# arg7: length of filename in arg6
 #
-sub show_progress ($$$);
+sub show_progress ($$$$$$$);
+
+#
+# arg1: bytes written
+# arg2: total bytes in file
+# arg3: time elapsed since copy began (in microseconds)
+# arg4: terminal width (in chars)
+# arg5: filehandle for output
+# arg6: filename string for file window
+# arg7: length of filename in arg6
+#
+sub show_completed ($$$$$$$);
 
 
 ####[ main line ]#########################################################################
@@ -373,6 +397,8 @@ sub parse_options ($)
 
   if ($$opt{v_debug} > 1)
   {
+    printf "about:$/  %s, %s$/$/", $PVERS, $PAUTH;
+
     printf "command-line options:$/";
 
     while (my ($k, $v) = each %{$opt}) 
@@ -496,10 +522,12 @@ sub prepare_copy ($$@)
         unless unlink $tarcur;        
     }
 
-    print_message $ERROR, sprintf "cannot create directory: $tardir[$DIR]: $!"
-      unless -d $tardir[$DIR] or File::Path::mkpath($tardir[$DIR]);
-    print_message $ERROR, sprintf "invalid path: cannot write to directory: $tardir[$DIR]"
-      unless -w $tardir[$DIR];
+    print_message $ERROR, 
+      sprintf "cannot create directory: $tardir[$DIR]: $!"
+        unless -d $tardir[$DIR] or File::Path::mkpath($tardir[$DIR]);
+    print_message $ERROR, 
+      sprintf "invalid path: cannot write to directory: $tardir[$DIR]"
+        unless -w $tardir[$DIR];
   }  
 }
 
@@ -543,6 +571,9 @@ sub copy_file ($$$$$$)
     my $width = int(log($rsize) / log(10) + 1);
     my $iters = undef;
     my $cperr = undef; 
+    my $tinit = undef;
+    my $rotsn = (File::Spec->splitpath($source))[2];
+    my $rotln = length $rotsn;
 
     if ($option{t_bench})
     {
@@ -572,9 +603,10 @@ sub copy_file ($$$$$$)
         $source, $target;
     }
 
+    $tinit = [Time::HiRes::gettimeofday()];
 
     {
-      my ($r, $w, $t, $p) = (0, 0, 0, 0);
+      my ($r, $w, $t) = (0, 0, 0);
 
       $cperr = sprintf "sysread(): cannot read file: $source: $!" and last
         unless defined ($r = sysread $read, $buff, $fsize);
@@ -588,18 +620,24 @@ sub copy_file ($$$$$$)
 
         $wsize += $t;
 
-        $p = $wsize / $rsize;
-
         if (defined $termsz)
         {
-          show_progress($p, $termsz, \*STDOUT);
+          show_progress(
+            $wsize, 
+            $rsize, 
+            Time::HiRes::tv_interval($tinit), 
+            $termsz, 
+            \*STDOUT, 
+            $rotsn,
+            $rotln
+          );
         }
         else
         {
           if ($option{v_debug} > 2)
           {
             printf "      [ %*d / %*d ] ( %6.2f%% )$/", 
-              $width, $wsize, $width, $rsize, $p * 100.0;
+              $width, $wsize, $width, $rsize, $wsize / $rsize * 100.0;
           }
         }
       }
@@ -647,7 +685,9 @@ sub test_buffers ($$$$$$)
   );
 
   $stotal = $stotal * $option{t_bench} * scalar @_; 
-  $evcode = "copy_file(++\$scount, $stotal, \"$source\", \"$target\", $fdtype, \$termsz)";
+
+  $evcode = 
+    "copy_file(++\$scount, $stotal, \"$source\", \"$target\", $fdtype, \$termsz)";
 
   cmpthese($option{t_bench}, { map {("[ $_ B ]" => "\$BUFFS = $_; $evcode")} @_ });
 }
@@ -658,7 +698,7 @@ sub get_terminal_width
 
   if ($option{w_width})
   {
-    $wchar = $option{w_width} < $MINTW ? $MINTW : $option{w_width};
+    $wchar = $option{w_width} < $MINSW ? $MINSW : $option{w_width};
   }
   elsif (exists $optional_module{'Term::ReadKey'})
   {
@@ -673,9 +713,9 @@ sub get_terminal_width
   return $wchar;
 }
 
-sub show_progress ($$$)
+sub show_progress ($$$$$$$)
 {
-  my ($cr, $tw, $fh) = @_;
+  my ($bw, $bt, $es, $tw, $fh, $sr, $sl) = @_;
 
   my $cf = select($fh); 
        $_= $|; 
@@ -683,17 +723,45 @@ sub show_progress ($$$)
        $|= $_;
        select($_);
 
-  my $as = ~~($tw - $MINTW); # entire space for progress bar (subtract details)
-  my $pr = ~~($cr * 100);    # percent complete
-  my $ns = $cr * $as;        # symbol count
-  my $ni = '*' x $ns;        # progress bar symbols
-  my $rs = $as - $ns;        # remaining space for progress bar  
+  my $cr = $bw / $bt;         # completion ratio  
+  my $pr = int($cr * 100);    # percent complete
 
-  printf $fh "\r[%-*s] %4s", $as, $ni, $pr >= 100 ? "done" : "$pr%";
+  # filename window
+  my $rn = int($es * 4) % $sl;
+  
+  if ($sl > $FILEW - 2)
+  {
+    $sl += 5;
+    $sr .= ' <=> ';
+
+    $rn = int($es * 4) % $sl;
+    $sr = substr($sr, $rn) . substr($sr, 0, $rn);
+  }
+
+  $sr = sprintf "%*s", $FILEW - 2, substr $sr, 0, $FILEW - 2;
+  my $fw = sprintf '[%*s]', $FILEW - 2, $sr;
+
+  # percentage window
+  my $pw = sprintf '[%*s%%]', $PCTGW - 3, $pr; # -3 chars for "[%]"
+
+  # determine if we have room for the progress bar
+  my $as = $tw - $MINSW; # remaining char space for progress bar
+
+  $as = $as < $PBARW ? 
+              0 : # hide the progress bar if we don't have the minimum chars required
+        $as - 2 ;  # otherwise, we have room. subtract -2 chars for "[]"
+
+  my $ni = int($cr * $as); # progress symbol count
+
+  # progress window
+  my $nw = $as > 0 ? sprintf '[%-*s]', $as, '*' x $ni : '';
+
+  printf $fh "\r%*s%-*s%*s", $FILEW, $fw, $as, $nw, $PCTGW, $pw;
 
   # STDOUT gets closed after flush, so we need to reopen it for our caller
-  select \*STDOUT if defined $termsz;  
+  select \*STDOUT if defined $termsz;
 }
+
 
 __END__
 
@@ -704,7 +772,7 @@ __END__
 
 =over 4
 
-=item B<pccp> -- Copy files and directories with optional progress indicator
+=item B<pccp> -- Copy files and directories with progress indicators, checksum validations, and some other stuff
 
 =back
 
