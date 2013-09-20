@@ -4,7 +4,7 @@ use strict;
 use warnings;
 
 
-####[ globals ]###########################################################################
+####[ constants ]#########################################################################
 
 
 our $PVERS = 'pccp version 0.1'; # version string printed in verbose mode
@@ -26,18 +26,35 @@ our $ONOES = 1; # bad
 
 our $BUFFS = 512000; # default I/O byte buffer size (500 KiB = 512 KB)
 
-our $FILEW = 18; # width of the filename window (chars)
+our $FILEW = 24; # width of the filename window (chars)
 our $PCTGW =  6; # width of the percentage string (chars)
 our $PBARW =  4; # minimum width required for progress bar (chars)
 our $MINSW = $FILEW + $PCTGW; # width of required status details (chars)
-our $MINTW = $MINSW + $PBARW; # minimum terminal width required for progess bar (chars)
 
 our $DEFTW = 60; # default terminal width if Term::ReadKey isn't available
 
 our $TRASH = '/dev/null'; # UNIX-only for now
 
+our @STATT = 
+(
+  'dev', # device number of filesystem
+  'ino', # inode number
+  'mod', # file mode (type and permissions)
+  'nhl', # number of (hard) links to the file
+  'uid', # numeric user ID of file's owner
+  'gid', # numeric group ID of file's owner
+  'did', # device identifier (special files only)
+  'siz', # total size of file in bytes
+  'act', # last access time in seconds since epoch
+  'mdt', # last modify time in seconds since epoch
+  'cgt', # inode change time in seconds since epoch
+  'bsz', # preferred I/O size in bytes
+  'blk', # actual number of blocks allocated
+);
+our %STATN = map { $_ => $.++ } @STATT;
 
-####[ constants ]#########################################################################
+
+####[ globals ]###########################################################################
 
 
 my %bootstrp_module = # these modules are needed for bootstrapping other features
@@ -209,8 +226,27 @@ sub copy_file ($$$$$$);
 sub test_buffers ($$$$$$);
 
 #
+# accepts the name of an executable as argument, and returns the full path for all
+# executables of this name in the user's path. returns the empty list if none found.
+#
+sub executable_path ($);
+
+#
+# walks over the user's PATH looking for a file with the name given in arg1. if found,
+# tries to execute the command with the arguments specified by arg2. once that 
+# command returns, it verifies the output was something we were expecting by matching
+# each line against the regular expression in arg3. returns a list of all matching
+# lines, or returns the empty list if nothing matched.
+#
+# arg1: program/command name
+# arg2: arguments for command arg1
+# arg3: regular expression (qr//) describing an expected result value format (per line)
+#
+sub execute_system_program ($$$);
+
+#
 # returns the argument passed to --width (if given). otherwise, uses (in order of
-# availability): Term::ReadKey and then $DEFTW
+# availability): Term::ReadKey, tput, stty, and then $DEFTW
 #
 sub get_terminal_width;
 
@@ -479,6 +515,8 @@ sub prepare_copy ($$@)
 
   my ($target, $fdtype, @source, @target) = @_;
 
+  my (@sfstat, @tfstat);
+
   print_message $ERROR, "target must be a directory " .
                         "when copying a directory or more than one file" 
     if $fdtype == $DTYPE and -f $target;
@@ -510,16 +548,23 @@ sub prepare_copy ($$@)
     $srccur = File::Spec->catpath(@srcdir);
     $tarcur = File::Spec->catpath(@tardir);
 
+    @sfstat = stat $srccur;
+    @tfstat = stat $tarcur;
+
     my ($srcdir, $tardir) = map { File::Basename::dirname($_) } ($srccur, $tarcur);
 
     for my $tarrem ($tarcur, $tardir)
     {
       next unless -f $tarrem;
 
+      @tfstat = stat $tarrem;
+      print_message $ERROR, "cannot copy: source and target are the same file"
+        if $sfstat[$STATN{ino}] == $tfstat[$STATN{ino}];
+
       print_message $ERROR, "cannot copy: file exists: $tarrem (use --force)"
         unless $option{f_force};
       print_message $ERROR, "cannot overwrite file: $tarrem: $!"
-        unless unlink $tarcur;        
+        unless unlink $tarrem;
     }
 
     print_message $ERROR, 
@@ -545,8 +590,7 @@ sub copy_file ($$$$$$)
   {
     if ($fdtype == $DTYPE)
     {
-      $target = File::Spec->catfile(File::Spec->splitdir($target), 
-                                   (File::Spec->splitpath($source))[2]);
+      $target = File::Spec->catfile($target, (File::Spec->splitpath($source))[2]);
     }
   }
 
@@ -605,6 +649,7 @@ sub copy_file ($$$$$$)
 
     $tinit = [Time::HiRes::gettimeofday()];
 
+###########################################################################[ DISK I/O ]>>>
     {
       my ($r, $w, $t) = (0, 0, 0);
 
@@ -622,15 +667,8 @@ sub copy_file ($$$$$$)
 
         if (defined $termsz)
         {
-          show_progress(
-            $wsize, 
-            $rsize, 
-            Time::HiRes::tv_interval($tinit), 
-            $termsz, 
-            \*STDOUT, 
-            $rotsn,
-            $rotln
-          );
+          show_progress($wsize, $rsize, 
+            Time::HiRes::tv_interval($tinit), $termsz, \*STDOUT, $rotsn, $rotln);
         }
         else
         {
@@ -644,11 +682,15 @@ sub copy_file ($$$$$$)
 
       redo;
     }
+###########################################################################[ DISK I/O ]<<<
 
     if ($wsize > 0 and not $option{t_bench})
     {
       print $/ if $option{v_debug} > 2  or $option{p_progr};
       print $/ if $option{v_debug} > 0 and $option{p_progr};
+
+      print_message $NOTIC, 
+        sprintf 'time spent copying = %.3fs', Time::HiRes::tv_interval($tinit);
     }
 
     close $writ;
@@ -670,7 +712,7 @@ sub test_buffers ($$$$$$)
     #1024 ** 0             ,# 1.00 B   =           1 byte
     #1024 ** 1 / 4         ,# 0.25 KiB =         256
     #1024 ** 1 / 2         ,# 0.50 KiB =         512
-    1024 ** 1             ,# 1.00 KiB =        1024
+    #1024 ** 1             ,# 1.00 KiB =        1024
     1024 ** 2 / 4         ,# 0.25 MiB =      262144
     1024 ** 2 / 3.2       ,# 0.31 MiB =      327680
     1024 ** 2 / 2.048     ,# 0.49 MiB =      512000
@@ -692,22 +734,76 @@ sub test_buffers ($$$$$$)
   cmpthese($option{t_bench}, { map {("[ $_ B ]" => "\$BUFFS = $_; $evcode")} @_ });
 }
 
+sub executable_path ($)
+{
+  my $name = shift @_;
+  my @path =  map { Cwd::realpath($_)              }
+             grep { -f "$_" && -x _                } 
+              map { File::Spec->catfile($_, $name) } split /:/, $ENV{PATH};
+
+  return @path;
+}
+
+sub execute_system_program ($$$)
+{
+  my ($name, $args, $evre) = @_;
+
+  my @line = ();
+
+  foreach (executable_path $name)
+  {
+    next unless open my $read, '-|', "\"$_\" $args";
+
+    @line = grep { $evre } <$read>; close $read; chomp @line;
+    
+    scalar @line > 0 and last or @line = ();
+  }
+
+  print_message $NOTIC, 
+    sprintf "no expected values returned from system command: `$name $args`"
+      unless scalar @line > 0;
+
+  return @line;
+}
+
 sub get_terminal_width
 {
   my ($wchar, $hchar, $wpixl, $hpixl) = (0, 0, 0, 0);
 
+  my @srval = ();
+
+  # width specified manually
   if ($option{w_width})
   {
     $wchar = $option{w_width} < $MINSW ? $MINSW : $option{w_width};
   }
+  # first try the most-portable Term::ReadKey
   elsif (exists $optional_module{'Term::ReadKey'})
   {
     ($wchar, $hchar, $wpixl, $hpixl) = @_ 
       if 0 < scalar (@_ = Term::ReadKey::GetTerminalSize());
   }
+  # and finally start querying the system tools
   else
   {
-    $wchar = $DEFTW;
+    if (0 < scalar (@srval = execute_system_program
+        'tput', 
+        'cols',
+        qr|^\s*\d+\s*$|))
+    {
+      ($wchar) = @srval;
+    }
+    elsif (0 < scalar (@srval = execute_system_program
+        'stty', 
+        '-a | sed -ne \'s/^.*columns\s*\([0-9]*\);.*$/\1\n/p\'',
+        qr|^\s*\d+\s*$|))
+    {
+      ($wchar) = @srval;
+    }
+    else
+    {
+      $wchar = $DEFTW;
+    }
   }
 
   return $wchar;
@@ -873,5 +969,3 @@ Use a progress bar with length of F<width> chars.
 =back
 
 =cut
-
-
