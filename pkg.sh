@@ -24,7 +24,7 @@ HOLD="${DIST}-publish"
 mkdir -p "${DIST}"
 mkdir -p "${HOLD}"
 
-cp "src/pccp.pl" "${DIST}"
+cp "src/pccp" "${DIST}"
 cp "README" "${DIST}"
 cp "LICENSE" "${DIST}"
 

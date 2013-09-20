@@ -26,23 +26,12 @@ module archive (http://www.cpan.org/).
 you can enable execute permissions and copy the file to a 
 directory in your user's shell PATH:
 
-  > chmod +x pccp.pl
-  > cp pccp.pl /usr/local/bin
+  > chmod +x pccp
+  > cp pccp /usr/local/bin
 
   To see what directories are in your PATH:
 
     > echo $PATH
-
-  I also recommend renaming the file or creating a symlink
-  when installing the script system-wide:
-
-    > cd /usr/local/bin
-    > mv pccp.pl pccp
-
-      - OR -
-    
-    > cd /usr/local/bin
-    > ln -s pccp.pl pccp
 
 ============================================================
                                                       USAGE
@@ -50,7 +39,7 @@ directory in your user's shell PATH:
 
 To view the built-in POD-generated man page:
 
-  > perl pccp.pl --manpage
+  > pccp --manpage
 
 ============================================================
                                                     CONTACT
