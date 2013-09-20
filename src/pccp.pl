@@ -8,7 +8,6 @@ use warnings;
 
 
 our $PVERS = 'pccp version 0.1'; # version string printed in verbose mode
-our $PAUTH = 'andrew@ardnew.com';
 
 our $GINFO = 0; # "general" message level
 our $NOTIC = 1; # "notice" (only prints if -v)
@@ -80,7 +79,7 @@ my %option =
   b_buffs => [ qw[                     buffer|b=i ],   $BUFFS   ], 
   c_cksum => [ qw[                   checksum|c=s           0 ] ], # 0 is "default value"
   d_depth => [ qw[                      depth|d=i          -1 ] ],  
-  f_force => [ qw[                      force|f             0 ] ],
+  f_force => [ qw[                      force|f!            1 ] ],
   h_usage => [ qw[    usage|help|what|wat|u|h|?             0 ] ],
   i_inter => [ qw[                interactive|i             0 ] ], 
   m_manpg => [ qw[                manpage|man|m             0 ] ],
@@ -433,7 +432,7 @@ sub parse_options ($)
 
   if ($$opt{v_debug} > 1)
   {
-    printf "about:$/  %s, %s$/$/", $PVERS, $PAUTH;
+    printf $/.'[ %s ]'.$/.$/, $PVERS;
 
     printf "command-line options:$/";
 
@@ -469,7 +468,7 @@ sub parse_filenames (@)
     show_modules $OPTMO, "feature", \%optional_module;
   }
     
-  print_message $ERROR, "required source and target files not provided (try --usage)" 
+  print_message $ERROR, "required source and target files not provided (try --manpage)" 
     unless @_ > 1;
 
   my ($target, @source, $fdtype, %unique) = shift @_;
@@ -876,7 +875,7 @@ __END__
 
 B<pccp> [ options ] [ B<-?bcdfhimpqrsuvw> ] F<source-file> F<target-file>
 
-B<pccp> [ options ] [ B<-?bcdfhimpqrsuvw> ] F<source-file(s)> F<target-directory>
+B<pccp> [ options ] [ B<-?bcdfhimpqrsuvw> ] F<source-file> F<...> F<target-directory>
 
 =head1 DESCRIPTION
 
@@ -894,7 +893,7 @@ Read and write F<bytes> of data during the copy operation. The default buffer si
 
 =item B<--checksum=>F<hash>, B<-c> F<hash>
 
-B<(NOT IMPLEMENTED)> Print checksum of source file and resulting copied file using hash function F<hash>. The following functions are available:
+(B<not implemented>) Print checksum of source file and resulting copied file using hash function F<hash>. The following functions are available:
 
     city = CityHash (32-bit)
     md5  = MD5
@@ -902,15 +901,15 @@ B<(NOT IMPLEMENTED)> Print checksum of source file and resulting copied file usi
 
 =item B<--crc=>F<bits>, B<-r> F<bits>
 
-B<(NOT IMPLEMENTED)> Perform a cyclic redundancy check (CRC) with a check value of size F<bits>.
+(B<not implemented>) Perform a cyclic redundancy check (CRC) with a check value of size F<bits>.
 
 =item B<--depth=>F<depth>, B<-d> F<depth>
 
-B<(NOT IMPLEMENTED)> When copying a directory, do not copy files more than F<depth> levels deep.
+(B<not implemented>) When copying a directory, do not copy files more than F<depth> levels deep.
 
 =item B<--force>, B<-f>
 
-Force copy even if destination file already exists.
+(B<default>) Force copy even if destination file already exists. Use B<--noforce> to disable.
 
 =item B<--help>, B<--usage>, B<--wat>, B<-h>, B<-u>, B<-w>, B<-?>
 
@@ -918,7 +917,7 @@ Print synopsis and options to STDOUT and exit.
 
 =item B<--interactive>, B<-i>
 
-B<(NOT IMPLEMENTED)> Before performing each file copy, prompt the user for approval.
+(B<not implemented>) Before performing each file copy, prompt the user for approval.
 
 =item B<--manpage>, B<-m>
 
@@ -926,7 +925,7 @@ Display the manual page and exit.
 
 =item B<--progress>, B<-p>
 
-Use visual indicator to show progress of copy operation. Currently uses a progress bar, but a sweet ASCII graphic of a shark attacking a man is in work. Use B<--noprogress>, B<--quiet>, or B<-q> to disable.
+(B<default>) Use visual indicator to show progress of copy operation. Currently uses a progress bar, but a sweet ASCII graphic of a shark attacking a man is in work. Use B<--noprogress>, B<--quiet>, or B<-q> to disable.
 
 =item B<--quiet>, B<-q>
 
@@ -934,7 +933,7 @@ Disable progress indicator. This is a synonym for B<--noprogress>.
 
 =over 4
 
-B<NOTE>: This option does not suppress all output. Details from B<--verbose> and B<--test> will still be printed if enabled.
+B<NOTE>: This option does not suppress all output. The B<--verbose> and B<--test> options do not give a shit and will keep running their mouth if enabled.
 
 =back
 
@@ -946,15 +945,14 @@ Do not actually perform the copy operation, but print to STDOUT the operations t
 
 Requires F<Benchmark> (Perl 5 core module). Performs F<iterations> copy operations for each of the following buffer sizes:
 
-     1024 bytes = 1.0 KiB
-   262144 bytes
+   262144 bytes = 0.25 MiB
    327680 bytes
-   512000 bytes = default
-   524288 bytes = 0.5 MiB
+   512000 bytes <- default
+   524288 bytes = 0.50 MiB
    655360 bytes
    800000 bytes
   1024000 bytes
-  1048576 bytes = 1.0 MiB
+  1048576 bytes = 1.00 MiB
 
 The F<Benchmark> module then prints a nice comparison table detailing the I/O performance of each buffer.
 
@@ -964,7 +962,7 @@ Print verbose debug information (additional flags increases level of detail).
 
 =item B<--width=>F<width>, B<-w> F<width>
 
-Use a progress bar with length of F<width> chars.
+Use a terminal width with length F<width> chars. Only the status line will span precisely F<width> chars (again, the B<--verbose> and B<--test> options do not give a shit).
 
 =back
 
