@@ -23,6 +23,8 @@ our $REQMO = 1; # required module
 our $ALLOK = 0; # good
 our $ONOES = 1; # bad
 
+our $PROGS = '=';
+
 our $BUFFS = 512000; # default I/O byte buffer size (500 KiB = 512 KB)
 
 our $FILEW = 14; # width of the filename window (chars)
@@ -849,7 +851,7 @@ sub show_progress ($$$$$$$)
   my $ni = int($cr * $as); # progress symbol count
 
   # progress window
-  my $nw = $as > 0 ? sprintf '[%-*s]', $as, '*' x $ni : '';
+  my $nw = $as > 0 ? sprintf '[%-*s]', $as, $PROGS x $ni : '';
 
   printf $fh "\r%*s%-*s%*s", $FILEW, $fw, $as, $nw, $PCTGW, $pw;
 
