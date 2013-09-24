@@ -23,7 +23,7 @@ our $REQMO = 1; # required module
 our $ALLOK = 0; # good
 our $ONOES = 1; # bad
 
-our $PROGS = '=';
+our $PROGS = '='; # symbol used to represent progress
 
 our $BUFFS = 512000; # default I/O byte buffer size (500 KiB = 512 KB)
 
@@ -32,9 +32,7 @@ our $PCTGW =  6; # width of the percentage string (chars)
 our $PBARW =  4; # minimum width required for progress bar (chars)
 our $MINSW = $FILEW + $PCTGW; # width of required status details (chars)
 
-our $DEFTW = 60; # default terminal width if Term::ReadKey isn't available
-
-our $TRASH = '/dev/null'; # UNIX-only for now
+our $DEFTW = 60; # default terminal width if we can't find one from the system
 
 our @STATT = 
 (
@@ -66,13 +64,16 @@ my %bootstrp_module = # these modules are needed for bootstrapping other feature
 
 my %required_module =
 (
+  'Cwd'             => [ qw[ realpath ] ],
   'File::Path'      => [ qw[] ],
+  'File::Spec'      => [ qw[ :all ] ],
+  'File::Find'      => [ qw[] ],
+  'Time::HiRes'     => [ qw[ gettimeofday tv_interval ] ],  
 );
 
 my %optional_module =
 (
   'Term::ReadKey'   => [ qw[] ],
-  'Time::HiRes'     => [ qw[ gettimeofday tv_interval ] ],
   'Benchmark'       => [ qw[ cmpthese ] ],
 );
 
@@ -99,6 +100,8 @@ my %pod =
   usage    => 1,
   manpage  => 2,
 );
+
+my $bitbucket = undef; # the system null device remains undef until we load File::Spec
 
 
 ####[ forward declarations ]##############################################################
@@ -191,6 +194,7 @@ sub pod ($$);
 # on failure, prints an error message and stops program execution 
 #
 sub parse_filenames (@);
+sub parse_filenames2 (@);
 
 #
 # all necessary permissions and directories of TARGET are validated (and created if
@@ -201,6 +205,7 @@ sub parse_filenames (@);
 # arg3..N: source file list
 #
 sub prepare_copy ($$@);
+sub prepare_copy2 ($$@);
 
 #
 # performs a block-level copy of one file
@@ -287,9 +292,9 @@ pod $ALLOK, "usage" if $option{h_usage};
 
 configure;
 
-my ($target, $fdtype, @source) = parse_filenames reverse @ARGV;
+my ($target, $fdtype, @source) = parse_filenames2 reverse @ARGV;
 
-prepare_copy $target, $fdtype, @source;
+#prepare_copy $target, $fdtype, @source;
 
 my ($scount, $stotal) = (0, scalar @source);
 
@@ -302,11 +307,11 @@ for my $srccur (@source)
 
   if ($option{t_bench})
   {
-    test_buffers($scount, $stotal, $srccur, $target, $fdtype, $termsz)
+    #test_buffers($scount, $stotal, $srccur, $target, $fdtype, $termsz)
   }
   else
   {
-    copy_file(++$scount, $stotal, $srccur, $target, $fdtype, $termsz);
+    #copy_file(++$scount, $stotal, $srccur, $target, $fdtype, $termsz);
   }
 }
 
@@ -361,10 +366,12 @@ sub print_message ($@)
 
 sub load_modules ($$)
 {
-  my ($msg, $req, $mod) = (undef, shift, shift);
+  my ($req, $mod) = @_;
 
   while (my ($pkg, @sym) = map { (ref) ? @{$_} : $_ } each %{$mod})
   {
+    my $msg = undef; # don't forget to reset every iteration!
+
     if (eval "require $pkg; 1")
     {
       foreach (@sym)
@@ -448,6 +455,8 @@ sub parse_options ($)
 
 sub configure
 {
+  $bitbucket = File::Spec->devnull; # UNIX: /dev/null
+
   $option{p_progr} = !!($option{p_progr} and not $option{q_quiet});
 }
 
@@ -508,6 +517,62 @@ sub parse_filenames (@)
     unless @source;
 
   return $target, $fdtype, @source;
+}
+
+sub parse_filenames2 (@)
+{
+  if ($option{v_debug} > 1)
+  {
+    show_modules $REQMO, "bootstrap", \%bootstrp_module;
+    show_modules $REQMO, "feature", \%required_module;
+    show_modules $OPTMO, "feature", \%optional_module;
+  }
+    
+  print_message $ERROR, "required source and target files not provided (try --manpage)"
+    unless @_ > 1;
+
+  our @dstack = ();
+  our @fstack = ();
+
+  my ($target, @source, $fdtype, %unique) = shift @_;
+
+  # determine the target file type (file or directory)
+  $fdtype = ($FTYPE, $DTYPE)
+
+    # destination is a directory if any of the following OR conditions are true:
+    [ 
+        # more than one source file specified (not necessarily existing files)
+        @_ > 1 
+      || 
+        # specified file is a directory -OR- specified name has a trailing slash
+        (-d $target || $target =~ /\/$/) 
+      || 
+        # the specified source file is a directory
+        (grep { -e && -d } @_) > 0 
+    ];
+
+  my %option = 
+  ( 
+    wanted => sub 
+      { push @fstack, [$File::Find::name, File::Spec->catfile(@dstack, $_)] unless -d },
+    preprocess => sub 
+      { push @dstack, (File::Spec->splitpath($File::Find::dir))[2]; @_ },
+    postprocess => sub 
+      { pop @dstack },
+
+    follow => 0, no_chdir => 0,
+  ); 
+
+  push @dstack, $target if $fdtype == $DTYPE;
+
+  File::Find::find(\%option, @_);
+
+  printf "%-50s -> %-40s$/", $$_[0], $fdtype == $DTYPE ? $$_[1] : $target foreach @fstack;
+
+  print_message $ERROR, "no valid source files provided" 
+    unless @source;
+
+  return $target, $fdtype, @source;    
 }
 
 sub prepare_copy ($$@)
@@ -585,7 +650,7 @@ sub copy_file ($$$$$$)
 
   if ($option{s_simul})
   {
-    $target = $TRASH;
+    $target = $bitbucket;
   }
   else
   {
@@ -738,8 +803,8 @@ sub test_buffers ($$$$$$)
 sub executable_path ($)
 {
   my $name = shift @_;
-  my @path =  map { Cwd::realpath($_)              }
-             grep { -f "$_" && -x _                } 
+  my @path =  map { Cwd::realpath($_) }
+             grep { -f "$_" && -x _   } 
               map { File::Spec->catfile($_, $name) } split /:/, $ENV{PATH};
 
   return @path;
@@ -819,6 +884,10 @@ sub show_progress ($$$$$$$)
        $|=  1;
        $|= $_;
        select($_);
+
+  #
+  # below this line is a hot mess.
+  #
 
   my $cr = $bw / $bt;         # completion ratio  
   my $pr = int($cr * 100);    # percent complete
