@@ -52,6 +52,8 @@ our @STATT =
 );
 our %STATN = map { $_ => $.++ } @STATT;
 
+our ($VOLIX, $DIRIX, $FILIX) = 0 .. 2; # indices for returned File::Spec->splitpath list
+
 
 ####[ globals ]###########################################################################
 
@@ -187,14 +189,11 @@ sub pod ($$);
 # if more than 1 SOURCE exists, TARGET must be a directory. otherwise, both may be
 # either a file or a directory
 #
-# on success, returns a list whose first element is TARGET, second element is the file 
-# type of TARGET ($FTYPE = file, $DTYPE = directory), and each following element is a
-# SOURCE. 
-#
-# on failure, prints an error message and stops program execution 
+# TODO: on success...
+# TODO: on failure...
 #
 sub parse_filenames (@);
-sub parse_filenames2 (@);
+sub prepare_copy2 (@);
 
 #
 # all necessary permissions and directories of TARGET are validated (and created if
@@ -205,7 +204,6 @@ sub parse_filenames2 (@);
 # arg3..N: source file list
 #
 sub prepare_copy ($$@);
-sub prepare_copy2 ($$@);
 
 #
 # performs a block-level copy of one file
@@ -292,7 +290,7 @@ pod $ALLOK, "usage" if $option{h_usage};
 
 configure;
 
-my ($target, $fdtype, @source) = parse_filenames2 reverse @ARGV;
+my ($target, $fdtype, @source) = prepare_copy2 reverse @ARGV;
 
 #prepare_copy $target, $fdtype, @source;
 
@@ -302,9 +300,6 @@ my ($termsz) = $option{p_progr} ? get_terminal_width : undef;
 
 for my $srccur (@source)
 {
-  print_message $WARNG, "$srccur: directory copy not implemented (ignoring)" and next
-    if -d $srccur;
-
   if ($option{t_bench})
   {
     #test_buffers($scount, $stotal, $srccur, $target, $fdtype, $termsz)
@@ -519,7 +514,7 @@ sub parse_filenames (@)
   return $target, $fdtype, @source;
 }
 
-sub parse_filenames2 (@)
+sub prepare_copy2 (@)
 {
   if ($option{v_debug} > 1)
   {
@@ -532,9 +527,14 @@ sub parse_filenames2 (@)
     unless @_ > 1;
 
   our @dstack = ();
-  our @fstack = ();
+  our %cppath = ();
 
   my ($target, @source, $fdtype, %unique) = shift @_;
+
+  @source = grep { -e } @_; # filter out the nonexistent source files
+
+  print_message $ERROR, "no valid source files provided"
+    unless @source > 0;
 
   # determine the target file type (file or directory)
   $fdtype = ($FTYPE, $DTYPE)
@@ -551,34 +551,52 @@ sub parse_filenames2 (@)
         (grep { -e && -d } @_) > 0 
     ];
 
-  my %option = 
-  ( 
-    wanted => sub 
-      { push @fstack, [$File::Find::name, File::Spec->catfile(@dstack, $_)] unless -d },
-    preprocess => sub 
-      { push @dstack, (File::Spec->splitpath($File::Find::dir))[2]; @_ },
-    postprocess => sub 
-      { pop @dstack },
-
-    follow => 0, no_chdir => 0,
-  ); 
+  print_message $ERROR, "target must be a directory " .
+                        "when copying a directory or more than one file" 
+    if $fdtype == $DTYPE and -f $target;    
 
   push @dstack, $target if $fdtype == $DTYPE;
 
-  File::Find::find(\%option, @_);
+  { no warnings; # File::Find is remarkably noisy
+    File::Find::find
+    (
+      {
+        wanted => sub 
+          { $cppath{$File::Find::name} = File::Spec->catfile(@dstack, $_) },
+        preprocess => sub 
+          { push @dstack, (File::Spec->splitpath($File::Find::dir))[2]; @_ },
+        postprocess => sub 
+          { pop @dstack },
+        follow => 0, no_chdir => 0,
+      },
+      @source
+    );
+  }
 
-  printf "%-50s -> %-40s$/", $$_[0], $fdtype == $DTYPE ? $$_[1] : $target foreach @fstack;
+  %cppath = map { $_ => $fdtype == $DTYPE ? $cppath{$_} : $target } keys %cppath;
 
-  print_message $ERROR, "no valid source files provided" 
-    unless @source;
+  sub nprefix ($) { (shift) ? "(DIR)" : "     " }
+  sub nsuffix ($) { (shift) ? "(NEW)" : "     " }
 
-  return $target, $fdtype, @source;    
+  if ($option{v_debug} > 1)
+  {
+    printf "  %s %-50s$/%*s-=> %s$/$/", nprefix(-d $_), $_, 10, " ", $cppath{$_} 
+      for sort keys %cppath;
+  }
+  elsif ($option{v_debug})
+  {
+    printf "source files:$/  %s$/$/", 
+      join("$/  ", map { nprefix(-d $_) . " $_" } sort keys %cppath);
+      
+    printf "target file:$/  %s %s %s$/$/", 
+      nprefix($fdtype), $target, nsuffix(not -e $target);
+  }
+
+  return $target, $fdtype, @source;
 }
 
 sub prepare_copy ($$@)
 {
-  my ($VOL, $DIR, $FIL) = 0 .. 2;
-
   my ($target, $fdtype, @source, @target) = @_;
 
   my (@sfstat, @tfstat);
@@ -607,8 +625,8 @@ sub prepare_copy ($$@)
 
     if ($fdtype == $DTYPE)
     {
-      $tardir[$DIR] = File::Spec->catdir($tardir[$DIR], $tardir[$FIL]);
-      $tardir[$FIL] = $srcdir[$FIL];
+      $tardir[$DIRIX] = File::Spec->catdir($tardir[$DIRIX], $tardir[$FILIX]);
+      $tardir[$FILIX] = $srcdir[$FILIX];
     }
 
     $srccur = File::Spec->catpath(@srcdir);
@@ -634,11 +652,11 @@ sub prepare_copy ($$@)
     }
 
     print_message $ERROR, 
-      sprintf "cannot create directory: $tardir[$DIR]: $!"
-        unless -d $tardir[$DIR] or File::Path::mkpath($tardir[$DIR]);
+      sprintf "cannot create directory: $tardir[$DIRIX]: $!"
+        unless -d $tardir[$DIRIX] or File::Path::mkpath($tardir[$DIRIX]);
     print_message $ERROR, 
-      sprintf "invalid path: cannot write to directory: $tardir[$DIR]"
-        unless -w $tardir[$DIR];
+      sprintf "invalid path: cannot write to directory: $tardir[$DIRIX]"
+        unless -w $tardir[$DIRIX];
   }  
 }
 
