@@ -189,21 +189,22 @@ sub pod ($$);
 # if more than 1 SOURCE exists, TARGET must be a directory. otherwise, both may be
 # either a file or a directory
 #
-# TODO: on success...
-# TODO: on failure...
+# on success, returns the file type of TARGET (FTYPE = file, DTYPE = directory), followed
+# by the root directory of the target copy path, and finally a hash structure of all 
+# needed copy operations. the { key => val } structure defines each key as a SOURCE path 
+# and TARGET as the corresponding target path
 #
-sub parse_filenames (@);
-sub prepare_copy2 (@);
+# on failure, prints an error message and exits the program
+#
+sub identify_paths (@);
 
 #
-# all necessary permissions and directories of TARGET are validated (and created if
-# the --force option is enabled).
+# accepts a list of directory paths and attempts to create them
 #
-# arg1: target file
-# arg2: target file type
-# arg3..N: source file list
+# on success, returns silently.
+# on failure, prints an error message and exits the program
 #
-sub prepare_copy ($$@);
+sub create_directories (@);
 
 #
 # performs a block-level copy of one file
@@ -290,23 +291,27 @@ pod $ALLOK, "usage" if $option{h_usage};
 
 configure;
 
-my ($target, $fdtype, @source) = prepare_copy2 reverse @ARGV;
+my ($fdtype, $tfroot, %cppath) = identify_paths reverse @ARGV;
 
-#prepare_copy $target, $fdtype, @source;
+my @tdpath = map { $cppath{$_} } grep { -d } keys %cppath;
+my @tfpath = grep { -f } keys %cppath;
 
-my ($scount, $stotal) = (0, scalar @source);
-
+my ($scount, $stotal) = (0, scalar @tfpath);
 my ($termsz) = $option{p_progr} ? get_terminal_width : undef;
 
-for my $srccur (@source)
+create_directories ($tfroot, @tdpath) unless $option{s_simul};
+
+for my $source (@tfpath)
 {
+  my $target = $option{s_simul} ? $bitbucket : $cppath{$source};
+
   if ($option{t_bench})
   {
-    #test_buffers($scount, $stotal, $srccur, $target, $fdtype, $termsz)
+    test_buffers($scount, $stotal, $source, $target, $fdtype, $termsz);
   }
   else
   {
-    #copy_file(++$scount, $stotal, $srccur, $target, $fdtype, $termsz);
+    copy_file(++$scount, $stotal, $source, $target, $fdtype, $termsz);
   }
 }
 
@@ -321,14 +326,17 @@ sub init
   load_modules 1, \%bootstrp_module;
   parse_options \%option;
 
-  print_message $ERROR, "module not found: Benchmark is required for I/O buffer tests"
-    unless not $option{t_bench} or exists $optional_module{'Benchmark'};
+  print_message $ERROR, 
+    "module not found: Benchmark is required for I/O buffer tests"
+      unless not $option{t_bench} or exists $optional_module{'Benchmark'};
 
-  print_message $WARNG, "specified buffer too small: $option{b_buffs}: using $BUFFS"
-    and $option{b_buffs} = $BUFFS unless $option{b_buffs} > 0;
+  print_message $WARNG, 
+    "specified buffer too small: $option{b_buffs}: using $BUFFS"
+      and $option{b_buffs} = $BUFFS unless $option{b_buffs} > 0;
 
-  print_message $WARNG, "specified buffer too large: $option{b_buffs}: using $BUFFS"
-    and $option{b_buffs} = $BUFFS unless $option{b_buffs} < 0x7FFFFFFF; # too big...? 
+  print_message $WARNG, 
+    "specified buffer too large: $option{b_buffs}: using $BUFFS"
+      and $option{b_buffs} = $BUFFS unless $option{b_buffs} < 0x7FFFFFFF; # too big...? 
 }
 
 sub print_message ($@)
@@ -450,9 +458,12 @@ sub parse_options ($)
 
 sub configure
 {
-  $bitbucket = File::Spec->devnull; # UNIX: /dev/null
+  $bitbucket = File::Spec->devnull; # UNIX: /dev/null  
 
   $option{p_progr} = !!($option{p_progr} and not $option{q_quiet});
+
+  print_message $NOTIC, "enabling --force for benchmarking tests"
+    if $option{t_bench} and not $option{f_force} and $option{f_force} = 1;  
 }
 
 sub pod ($$)
@@ -465,7 +476,7 @@ sub pod ($$)
   if defined $pod{$_[1]};
 }
 
-sub parse_filenames (@)
+sub identify_paths (@)
 {
   if ($option{v_debug} > 1)
   {
@@ -474,67 +485,17 @@ sub parse_filenames (@)
     show_modules $OPTMO, "feature", \%optional_module;
   }
     
-  print_message $ERROR, "required source and target files not provided (try --manpage)" 
-    unless @_ > 1;
-
-  my ($target, @source, $fdtype, %unique) = shift @_;
-
-  %unique = map { $_ => undef } @_;
-
-  foreach (keys %unique)
-  {
-    print_message $WARNG, "no such file or directory: $_" and next 
-      unless -e;
-
-    if (-f) 
-    {    
-      print_message $WARNG, "cannot read file: $_" and next
-        unless -r;
-    } 
-    elsif (-d) 
-    { 
-      print_message $WARNG, "cannot read directory: $_" and next
-        unless -r;
-    }       
-    else 
-    { 
-      print_message $WARNG, "unknown file type: $_" and next;
-    }
-
-    push @source, Cwd::realpath($_);
-  }
-
-  $fdtype = ($FTYPE, $DTYPE)[ @_ > 1 
-    || (-d $target || $target =~ /\/$/) 
-    || (grep { -e && -d } @_) > 0 ];
-
-  print_message $ERROR, "no valid source files provided" 
-    unless @source;
-
-  return $target, $fdtype, @source;
-}
-
-sub prepare_copy2 (@)
-{
-  if ($option{v_debug} > 1)
-  {
-    show_modules $REQMO, "bootstrap", \%bootstrp_module;
-    show_modules $REQMO, "feature", \%required_module;
-    show_modules $OPTMO, "feature", \%optional_module;
-  }
-    
-  print_message $ERROR, "required source and target files not provided (try --manpage)"
-    unless @_ > 1;
-
-  our @dstack = ();
-  our %cppath = ();
+  print_message $ERROR, 
+    "required source and target files not provided (try --manpage)"
+      unless @_ > 1;
 
   my ($target, @source, $fdtype, %unique) = shift @_;
 
   @source = grep { -e } @_; # filter out the nonexistent source files
 
-  print_message $ERROR, "no valid source files provided"
-    unless @source > 0;
+  print_message $ERROR, 
+    "no valid source files provided"
+      unless @source > 0;
 
   # determine the target file type (file or directory)
   $fdtype = ($FTYPE, $DTYPE)
@@ -551,137 +512,115 @@ sub prepare_copy2 (@)
         (grep { -e && -d } @_) > 0 
     ];
 
-  print_message $ERROR, "target must be a directory " .
-                        "when copying a directory or more than one file" 
-    if $fdtype == $DTYPE and -f $target;    
+  print_message $ERROR, 
+    "target must be a directory when copying a directory or more than one file" 
+      if $fdtype == $DTYPE and -f $target;
 
-  push @dstack, $target if $fdtype == $DTYPE;
+  print_message $NOTIC, 
+    "enabling --force for benchmarking tests"
+      if $option{t_bench} and not $option{f_force} and $option{f_force} = 1;     
 
-  { no warnings; # File::Find is remarkably noisy
-    File::Find::find
-    (
+  #
+  # the { key => val } structure of a hash is perfect for defining primitive copy
+  # operations, where key is a source file path and val is the destination path
+  # 
+  # both %cppath and the below @dstack are declared global with "our" to provide
+  # visibility from within File::Find
+  #
+  our %cppath = ();
+
+  if ($fdtype == $DTYPE)
+  {
+    our @dstack = ( $target );
+
+    # File::Find is remarkably noisy
+    { no warnings; File::Find::find(
       {
-        wanted => sub 
-          { $cppath{$File::Find::name} = File::Spec->catfile(@dstack, $_) },
         preprocess => sub 
-          { push @dstack, (File::Spec->splitpath($File::Find::dir))[2]; @_ },
+          { push @dstack, 
+              (File::Spec->splitpath($File::Find::dir))[$FILIX]; @_ },
         postprocess => sub 
           { pop @dstack },
+        wanted => sub 
+          { $cppath{$File::Find::name} = 
+              File::Spec->catfile(@dstack, 
+                (File::Spec->splitpath($File::Find::name))[$FILIX]) },            
         follow => 0, no_chdir => 0,
       },
       @source
-    );
+    )};
+  }
+  else
+  {
+    $cppath{pop @source} = $target;
   }
 
-  %cppath = map { $_ => $fdtype == $DTYPE ? $cppath{$_} : $target } keys %cppath;
-
-  sub nprefix ($) { (shift) ? "(DIR)" : "     " }
-  sub nsuffix ($) { (shift) ? "(NEW)" : "     " }
-
+  # show the selected files and their destination if elevated --verbose
   if ($option{v_debug} > 1)
   {
-    printf "  %s %-50s$/%*s-=> %s$/$/", nprefix(-d $_), $_, 10, " ", $cppath{$_} 
-      for sort keys %cppath;
-  }
-  elsif ($option{v_debug})
-  {
-    printf "source files:$/  %s$/$/", 
-      join("$/  ", map { nprefix(-d $_) . " $_" } sort keys %cppath);
-      
-    printf "target file:$/  %s %s %s$/$/", 
-      nprefix($fdtype), $target, nsuffix(not -e $target);
+    sub nprefix ($) { (shift) ? "(DIR)" : "     " }
+    sub nsuffix ($) { (shift) ? "(NEW)" : "     " }
+
+    # shows precisely the source and target file paths for every source file
+    if ($option{v_debug} > 2)
+    {
+      printf "copy operations:$/";
+      printf "  %s %-50s$/%*s-=> %s$/$/", nprefix(-d $_), $_, 10, " ", $cppath{$_} 
+        for sort keys %cppath;
+    }
+    # shows a list of source files and the target file/directory
+    else
+    {
+      printf "source files:$/  %s$/$/", 
+        join("$/  ", map { nprefix(-d $_) . " $_" } sort keys %cppath);
+        
+      printf "target file:$/  %s %s %s$/$/", 
+        nprefix($fdtype), $target, nsuffix(not -e $target);
+    }
   }
 
-  return $target, $fdtype, @source;
+  return 
+    $fdtype, 
+    $fdtype == $DTYPE 
+      ? $target 
+      : (File::Spec->splitpath($target))[$DIRIX] || ".", 
+    %cppath;
 }
 
-sub prepare_copy ($$@)
+sub create_directories (@)
 {
-  my ($target, $fdtype, @source, @target) = @_;
-
-  my (@sfstat, @tfstat);
-
-  print_message $ERROR, "target must be a directory " .
-                        "when copying a directory or more than one file" 
-    if $fdtype == $DTYPE and -f $target;
-
-  if ($option{v_debug} > 1)
+  foreach my $directory (@_)
   {
-    printf "source files:$/  %s$/$/", join("$/  ", @source);
-      
-    printf "target %s:$/  %s%s$/$/", 
-      $fdtype == $DTYPE ? "directory" : "file", $target, -e $target ? "" : " (new)";
+    print_message $ERROR, 
+      sprintf "cannot create directory: $directory: $!"
+        unless -d $directory or File::Path::mkpath($directory);
+    print_message $ERROR, 
+      sprintf "invalid path: cannot write to directory: $directory"
+        unless -w $directory;
   }
-
-  print_message $NOTIC, "enabling --force for benchmarking tests"
-    if $option{t_bench} and not $option{f_force} and $option{f_force} = 1;
-
-  for my $srccur (@source)
-  {
-    my $tarcur = $target;
-
-    my @srcdir = File::Spec->splitpath($srccur);
-    my @tardir = File::Spec->splitpath(File::Spec->rel2abs($tarcur));
-
-    if ($fdtype == $DTYPE)
-    {
-      $tardir[$DIRIX] = File::Spec->catdir($tardir[$DIRIX], $tardir[$FILIX]);
-      $tardir[$FILIX] = $srcdir[$FILIX];
-    }
-
-    $srccur = File::Spec->catpath(@srcdir);
-    $tarcur = File::Spec->catpath(@tardir);
-
-    @sfstat = stat $srccur;
-    @tfstat = stat $tarcur;
-
-    my ($srcdir, $tardir) = map { File::Basename::dirname($_) } ($srccur, $tarcur);
-
-    for my $tarrem ($tarcur, $tardir)
-    {
-      next unless -f $tarrem;
-
-      @tfstat = stat $tarrem;
-      print_message $ERROR, "cannot copy: source and target are the same file"
-        if $sfstat[$STATN{ino}] == $tfstat[$STATN{ino}];
-
-      print_message $ERROR, "cannot copy: file exists: $tarrem (use --force)"
-        unless $option{f_force};
-      print_message $ERROR, "cannot overwrite file: $tarrem: $!"
-        unless unlink $tarrem;
-    }
-
-    print_message $ERROR, 
-      sprintf "cannot create directory: $tardir[$DIRIX]: $!"
-        unless -d $tardir[$DIRIX] or File::Path::mkpath($tardir[$DIRIX]);
-    print_message $ERROR, 
-      sprintf "invalid path: cannot write to directory: $tardir[$DIRIX]"
-        unless -w $tardir[$DIRIX];
-  }  
 }
 
 sub copy_file ($$$$$$)
 {
   my ($scount, $stotal, $source, $target, $fdtype, $termsz) = @_;
 
-  my $cwidth = int(log($stotal) / log(10) + 1); # log10($stotal)+1 = number of digits
-
-  if ($option{s_simul})
-  {
-    $target = $bitbucket;
-  }
-  else
-  {
-    if ($fdtype == $DTYPE)
-    {
-      $target = File::Spec->catfile($target, (File::Spec->splitpath($source))[2]);
-    }
-  }
+  my $cwidth = int(log($stotal) / log(10) + 1); # log10(N)+1 = number of digits in N
 
   {
     my $read; # source file "read" handle
     my $writ; # target file "write" handle
     my $buff; # byte buffer
+
+    my @sfstat = stat $source;
+    my @tfstat = stat $target;
+
+    if (-f $target)
+    {
+      print_message $ERROR, "cannot copy: source and target are the same file"
+        if $sfstat[$STATN{ino}] == $tfstat[$STATN{ino}];
+      print_message $ERROR, "cannot copy: file exists: $target (use --force)"
+        unless $option{f_force};
+    }
 
     print_message $ERROR, sprintf "cannot open file for reading: $source: $!"
       unless open $read, '<', $source;
