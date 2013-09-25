@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 NAME='pccp'
-VERS='0.1'
+VERS='0.2'
 
 ROOT=`pwd`
 cd "`dirname $0`"
