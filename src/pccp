@@ -7,7 +7,7 @@ use warnings;
 ####[ constants ]#########################################################################
 
 
-our $PVERS = 'pccp version 0.1'; # version string printed in verbose mode
+our $PVERS = 'pccp version 0.2'; # version string printed in verbose mode
 
 our $GINFO = 0; # "general" message level
 our $NOTIC = 1; # "notice" (only prints if -v)
