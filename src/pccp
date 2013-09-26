@@ -23,7 +23,8 @@ our $REQMO = 1; # required module
 our $ALLOK = 0; # good
 our $ONOES = 1; # bad
 
-our $PROGS = '='; # symbol used to represent progress
+our $PROGS = '='; # symbol used to represent each step of the progress bar
+our $FCYCS = ' :: '; # string used to separate end from beginning of cycling filename
 
 our $BUFFS = 512000; # default I/O byte buffer size (500 KiB = 512 KB)
 
@@ -66,9 +67,8 @@ my %bootstrp_module = # these modules are needed for bootstrapping other feature
 
 my %required_module =
 (
-  'Cwd'             => [ qw[ realpath ] ],
-  'File::Path'      => [ qw[] ],
   'File::Spec'      => [ qw[ :all ] ],
+  'File::Path'      => [ qw[] ],
   'File::Find'      => [ qw[] ],
   'Time::HiRes'     => [ qw[ gettimeofday tv_interval ] ],  
 );
@@ -533,25 +533,36 @@ sub identify_paths (@)
   {
     our @dstack = ( $target );
 
-    # File::Find is remarkably noisy
-    { no warnings; File::Find::find(
-      {
-        preprocess => sub 
-          { push @dstack, 
-              (File::Spec->splitpath($File::Find::dir))[$FILIX]; @_ },
-        postprocess => sub 
-          { pop @dstack },
-        wanted => sub 
-          { $cppath{$File::Find::name} = 
-              File::Spec->catfile(@dstack, 
-                (File::Spec->splitpath($File::Find::name))[$FILIX]) },            
-        follow => 0, no_chdir => 0,
-      },
-      @source
-    )};
+    { # File::Find is remarkably noisy
+      no warnings; 
+
+      sub preprocess 
+        { push @dstack, (File::Spec->splitpath($File::Find::dir))[$FILIX]; @_ }
+
+      sub postprocess 
+        { pop @dstack }
+
+      sub wanted 
+      { 
+        my $cfname = (File::Spec->splitpath($File::Find::name))[$FILIX];
+        $cppath{$File::Find::name} = File::Spec->catfile(@dstack, $cfname);
+      }
+
+      my %findop =
+      (
+        preprocess   => \&preprocess,
+        postprocess  => \&postprocess,
+        wanted       => \&wanted,
+        follow       => 0,
+        no_chdir     => 0,       
+      );
+
+      File::Find::find(\%findop, @source);
+    }
   }
   else
   {
+    # if target is a file, we only have a single copy operation
     $cppath{pop @source} = $target;
   }
 
@@ -854,8 +865,8 @@ sub show_progress ($$$$$$$)
   
   if ($sl > $FILEW - 2)
   {
-    $sl += 5;
-    $sr .= ' --- ';
+    $sr .= $FCYCS;
+    $sl += length $FCYCS;
 
     $rn = int($es * 4) % $sl;
     $sr = substr($sr, $rn) . substr($sr, 0, $rn);
