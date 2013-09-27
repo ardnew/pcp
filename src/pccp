@@ -7,35 +7,35 @@ use warnings;
 ####[ constants ]#########################################################################
 
 
-our $PVERS = 'pccp version 0.2'; # version string printed in verbose mode
+my $PVERS = 'pccp version 0.2'; # version string printed in verbose mode
 
-our $GINFO = 0; # "general" message level
-our $NOTIC = 1; # "notice" (only prints if -v)
-our $WARNG = 2; # "warning"
-our $ERROR = 3; # "error"
+my $GINFO = 0; # "general" message level
+my $NOTIC = 1; # "notice" (only prints if -v)
+my $WARNG = 2; # "warning"
+my $ERROR = 3; # "error"
 
-our $FTYPE = 0; # "file"
-our $DTYPE = 1; # "directory"
+my $FTYPE = 0; # "file"
+my $DTYPE = 1; # "directory"
 
-our $OPTMO = 0; # optional module
-our $REQMO = 1; # required module
+my $OPTMO = 0; # optional module
+my $REQMO = 1; # required module
 
-our $ALLOK = 0; # good
-our $ONOES = 1; # bad
+my $ALLOK = 0; # good
+my $ONOES = 1; # bad
 
-our $PROGS = '='; # symbol used to represent each step of the progress bar
-our $FCYCS = ' :: '; # string used to separate end from beginning of cycling filename
+my $INVAL = -1; # invalid
 
-our $BUFFS = 512000; # default I/O byte buffer size (500 KiB = 512 KB)
+my $PROGS = '='; # symbol used to represent each step of the progress bar
+my $FCYCS = ' :: '; # string used to separate end from beginning of cycling filename
 
-our $FILEW = 14; # width of the filename window (chars)
-our $PCTGW =  6; # width of the percentage string (chars)
-our $PBARW =  4; # minimum width required for progress bar (chars)
-our $MINSW = $FILEW + $PCTGW; # width of required status details (chars)
+my $FILEW = 14; # width of the filename window (chars)
+my $PCTGW =  6; # width of the percentage string (chars)
+my $PBARW =  4; # minimum width required for progress bar (chars)
+my $MINSW = $FILEW + $PCTGW; # width of required status details (chars)
 
-our $DEFTW = 60; # default terminal width if we can't find one from the system
+my $DEFTW = 60; # default terminal width if we can't find one from the system
 
-our @STATT = 
+my @STATT = 
 (
   'dev', # device number of filesystem
   'ino', # inode number
@@ -51,13 +51,15 @@ our @STATT =
   'bsz', # preferred I/O size in bytes
   'blk', # actual number of blocks allocated
 );
-our %STATN = map { $_ => $.++ } @STATT;
+my %STATN = map { $_ => $.++ } @STATT;
 
-our ($VOLIX, $DIRIX, $FILIX) = 0 .. 2; # indices for returned File::Spec->splitpath list
+my ($VOLIX, $DIRIX, $FILIX) = 0 .. 2; # indices for returned File::Spec->splitpath list
 
 
 ####[ globals ]###########################################################################
 
+our $bitbucket = undef; # the system null device remains undef until we load File::Spec
+our $defbuff = 512000; # default I/O buffer size for benchmarking or missing POSIX
 
 my %bootstrp_module = # these modules are needed for bootstrapping other features
 (
@@ -75,13 +77,15 @@ my %required_module =
 
 my %optional_module =
 (
+  'POSIX'           => [ qw[] ],
   'Term::ReadKey'   => [ qw[] ],
   'Benchmark'       => [ qw[ cmpthese ] ],
 );
 
 my %option =
 (
-  b_buffs => [ qw[                     buffer|b=i ],   $BUFFS   ], 
+  #b_buffs => [ qw[                     buffer|b=i ],   $INVAL   ],
+  b_buffs => [ qw[                     buffer|b=i ], $defbuff   ],
   c_cksum => [ qw[                   checksum|c=s           0 ] ], # 0 is "default value"
   d_depth => [ qw[                      depth|d=i          -1 ] ],  
   f_force => [ qw[                      force|f!            1 ] ],
@@ -102,8 +106,6 @@ my %pod =
   usage    => 1,
   manpage  => 2,
 );
-
-my $bitbucket = undef; # the system null device remains undef until we load File::Spec
 
 
 ####[ forward declarations ]##############################################################
@@ -325,18 +327,6 @@ sub init
 {
   load_modules 1, \%bootstrp_module;
   parse_options \%option;
-
-  print_message $ERROR, 
-    "module not found: Benchmark is required for I/O buffer tests"
-      unless not $option{t_bench} or exists $optional_module{'Benchmark'};
-
-  print_message $WARNG, 
-    "specified buffer too small: $option{b_buffs}: using $BUFFS"
-      and $option{b_buffs} = $BUFFS unless $option{b_buffs} > 0;
-
-  print_message $WARNG, 
-    "specified buffer too large: $option{b_buffs}: using $BUFFS"
-      and $option{b_buffs} = $BUFFS unless $option{b_buffs} < 0x7FFFFFFF; # too big...? 
 }
 
 sub print_message ($@)
@@ -458,9 +448,38 @@ sub parse_options ($)
 
 sub configure
 {
-  $bitbucket = File::Spec->devnull; # UNIX: /dev/null  
+  $option{p_progr} = !!($option{p_progr} and not $option{q_quiet});  
 
-  $option{p_progr} = !!($option{p_progr} and not $option{q_quiet});
+  $bitbucket = File::Spec->devnull; # UNIX: /dev/null
+
+  print_message $ERROR, 
+    "module not found: Benchmark is required for I/O buffer tests"
+      unless not $option{t_bench} or exists $optional_module{'Benchmark'};  
+
+if (0)
+{
+  if ($option{b_buffs} == $INVAL)
+  {
+    if (exists $optional_module{'POSIX'})
+    {
+      $option{b_buffs} = POSIX::sysconf(&POSIX::_SC_PAGESIZE);
+    }
+    else
+    {    
+      print_message $WARNG, 
+        "module not found: POSIX: using buffer size $defbuff bytes";
+      $option{b_buffs} = $defbuff;
+    }
+  }
+}
+
+  print_message $WARNG, 
+    "specified buffer too small: $option{b_buffs}: using $defbuff bytes"
+      and $option{b_buffs} = $defbuff unless $option{b_buffs} > 0;
+
+  print_message $WARNG, 
+    "specified buffer too large: $option{b_buffs}: using $defbuff bytes"
+      and $option{b_buffs} = $defbuff unless $option{b_buffs} < 0x7FFFFFFF;
 
   print_message $NOTIC, "enabling --force for benchmarking tests"
     if $option{t_bench} and not $option{f_force} and $option{f_force} = 1;  
@@ -643,7 +662,7 @@ sub copy_file ($$$$$$)
     print_message $ERROR, sprintf "cannot put file in binary mode: $target: $!"
       unless binmode $writ;
 
-    my $fsize = $option{t_bench} ? $BUFFS : $option{b_buffs} || $BUFFS;
+    my $fsize = $option{t_bench} ? $defbuff : $option{b_buffs} || $defbuff;
     my $rsize = -s $read || 1000;
     my $wsize = 0;
     my $width = int(log($rsize) / log(10) + 1);
@@ -765,7 +784,7 @@ sub test_buffers ($$$$$$)
   $evcode = 
     "copy_file(++\$scount, $stotal, \"$source\", \"$target\", $fdtype, \$termsz)";
 
-  cmpthese($option{t_bench}, { map {("[ $_ B ]" => "\$BUFFS = $_; $evcode")} @_ });
+  cmpthese($option{t_bench}, { map {("[ $_ B ]" => "\$defbuff = $_; $evcode")} @_ });
 }
 
 sub executable_path ($)
