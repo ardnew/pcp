@@ -7,7 +7,7 @@ use warnings;
 ####[ constants ]#########################################################################
 
 
-my $PVERS = 'pccp version 0.2'; # version string printed in verbose mode
+my $PVERS = 'pcp version 0.2'; # version string printed in verbose mode
 
 my $GINFO = 0; # "general" message level
 my $NOTIC = 1; # "notice" (only prints if -v)
@@ -925,19 +925,19 @@ __END__
 
 =over 4
 
-=item B<pccp> -- Copy files and directories with progress indicators, checksum validations, and some other stuff
+=item B<pcp> -- Copy files and directories with progress indicators, checksum validations, and some other stuff
 
 =back
 
 =head1 SYNOPSIS
 
-B<pccp> [ options ] [ B<-?bcdfhimpqrsuvw> ] F<source-file> F<target-file>
+B<pcp> [ options ] [ B<-?bcdfhimpqrsuvw> ] F<source-file> F<target-file>
 
-B<pccp> [ options ] [ B<-?bcdfhimpqrsuvw> ] F<source-file> F<...> F<target-directory>
+B<pcp> [ options ] [ B<-?bcdfhimpqrsuvw> ] F<source-file> F<...> F<target-directory>
 
 =head1 DESCRIPTION
 
-B<pccp> will perform a block-level copy on a set of files or directories from one location to another, and it can display a real-time progress indicator with checksum details of the resulting copy operation.
+B<pcp> will perform a block-level copy on a set of files or directories from one location to another, and it can display a real-time progress indicator with checksum details of the resulting copy operation.
 
 The program does not currently support asynchronous I/O, so copy operations from one disk to another may be stupid slow.
 

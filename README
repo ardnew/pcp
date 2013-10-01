@@ -26,8 +26,8 @@ module archive (http://www.cpan.org/).
 you can enable execute permissions and copy the file to a 
 directory in your user's shell PATH:
 
-  > chmod +x pccp
-  > cp pccp /usr/local/bin
+  > chmod +x pcp
+  > cp pcp /usr/local/bin
 
   To see what directories are in your PATH:
 
@@ -39,7 +39,7 @@ directory in your user's shell PATH:
 
 To view the built-in POD-generated man page:
 
-  > pccp --manpage
+  > pcp --manpage
 
 ============================================================
                                                     CONTACT

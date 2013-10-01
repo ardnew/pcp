@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-NAME='pccp'
+NAME='pcp'
 VERS='0.2'
 
 ROOT=`pwd`
@@ -24,7 +24,7 @@ HOLD="${DIST}-publish"
 mkdir -p "${DIST}"
 mkdir -p "${HOLD}"
 
-cp "src/pccp" "${DIST}"
+cp "src/pcp" "${DIST}"
 cp "README" "${DIST}"
 cp "LICENSE" "${DIST}"
 
