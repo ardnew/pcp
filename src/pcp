@@ -59,7 +59,7 @@ my ($VOLIX, $DIRIX, $FILIX) = 0 .. 2; # indices for returned File::Spec->splitpa
 ####[ globals ]###########################################################################
 
 our $bitbucket = undef; # the system null device remains undef until we load File::Spec
-our $defbuff = 512000; # default I/O buffer size for benchmarking or missing POSIX
+our $defbuff = 512000; # default I/O byte buffer size
 
 my %bootstrp_module = # these modules are needed for bootstrapping other features
 (
@@ -84,8 +84,7 @@ my %optional_module =
 
 my %option =
 (
-  #b_buffs => [ qw[                     buffer|b=i ],   $INVAL   ],
-  b_buffs => [ qw[                     buffer|b=i ], $defbuff   ],
+  b_buffs => [ qw[                     buffer|b=i   ], $defbuff ],
   c_cksum => [ qw[                   checksum|c=s           0 ] ], # 0 is "default value"
   d_depth => [ qw[                      depth|d=i          -1 ] ],  
   f_force => [ qw[                      force|f!            1 ] ],
@@ -456,8 +455,11 @@ sub configure
     "module not found: Benchmark is required for I/O buffer tests"
       unless not $option{t_bench} or exists $optional_module{'Benchmark'};  
 
+# DISABLED FOR NOW - the larger buffers seem to perform much MUCH better than the 
+# preferred page size reported by sysconf in the _SC_PAGESIZE field
 if (0)
 {
+  # ask the POSIX layer for a preferred page size for the I/O operations
   if ($option{b_buffs} == $INVAL)
   {
     if (exists $optional_module{'POSIX'})
