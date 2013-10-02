@@ -636,6 +636,10 @@ sub copy_file ($$$$$$)
 {
   my ($scount, $stotal, $source, $target, $fdtype, $termsz) = @_;
 
+  use Digest::SHA;
+
+  my $state;  
+
   my $cwidth = int(log($stotal) / log(10) + 1); # log10(N)+1 = number of digits in N
 
   {
@@ -653,6 +657,9 @@ sub copy_file ($$$$$$)
       print_message $ERROR, "cannot copy: file exists: $target (use --force)"
         unless $option{f_force};
     }
+
+    $state = Digest::SHA->new(256);
+    print_message $GINFO, sprintf "source digest = %s", ($state = $state->addfile($target, 'b'))->hexdigest;
 
     print_message $ERROR, sprintf "cannot open file for reading: $source: $!"
       unless open $read, '<', $source;
@@ -704,6 +711,8 @@ sub copy_file ($$$$$$)
 
     $tinit = [Time::HiRes::gettimeofday()];
 
+    $state = Digest::SHA->new(256);
+
 ###########################################################################[ DISK I/O ]>>>
     {
       my ($r, $w, $t) = (0, 0, 0);
@@ -717,6 +726,8 @@ sub copy_file ($$$$$$)
       {
         $cperr = sprintf "syswrite(): cannot write file: $target: $!" and last
           unless $t = syswrite $writ, $buff, $r - $w, $w;
+
+        $state->add($buff);
 
         $wsize += $t;
 
@@ -738,6 +749,8 @@ sub copy_file ($$$$$$)
       redo;
     }
 ###########################################################################[ DISK I/O ]<<<
+
+    print_message $GINFO, sprintf "target digest = %s", $state->hexdigest;
 
     if ($wsize > 0 and not $option{t_bench})
     {
@@ -957,7 +970,7 @@ Read and write F<bytes> of data during the copy operation. The default buffer si
 
     city = CityHash (32-bit)
     md5  = MD5
-    sha  = SHA-1
+    sha  = SHA-256
 
 =item B<--crc=>F<bits>, B<-r> F<bits>
 
