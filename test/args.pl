@@ -12,13 +12,13 @@ use warnings;
 use File::Spec;
 
 #
-# specify the path to pcp on command line.
-#  ..or use the default ("../src/pcp")
+# specify the path to ##PROGRAMNAME## on command line.
+#  ..or use the default ("../src/##PROGRAMNAME##")
 #
-our $PCCP_PATH = (shift) || File::Spec->catfile(('..', 'src'), 'pcp');
+our $PCCP_PATH = (shift) || File::Spec->catfile(('..', 'src'), '##PROGRAMNAME##');
 
 #
-# redirect pcp's writes from STDERR to STDOUT, which is only a 
+# redirect ##PROGRAMNAME##'s writes from STDERR to STDOUT, which is only a 
 #  convenience for paging output with e.g. `less' or `more'
 #
 our $REDIR_ERR = 1; 
