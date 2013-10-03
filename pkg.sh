@@ -1,7 +1,18 @@
 #!/usr/bin/env bash
 
-NAME='pcp'
-VERS='0.2'
+if [ $# -lt 2 ]; then
+	echo "usage:"
+	echo "   $0 program-name program-version"
+	exit
+fi
+
+NAME="$1"
+VERS="$2"
+DATE="$(date "+%m/%d/%Y %R:%S %Z")"
+
+TOKEN_NAME='##PROGRAMNAME##'
+TOKEN_VERS='##PROGRAMVERSION##'
+TOKEN_DATE='##PROGRAMDATE##'
 
 ROOT=`pwd`
 cd "`dirname $0`"
@@ -24,7 +35,7 @@ HOLD="${DIST}-publish"
 mkdir -p "${DIST}"
 mkdir -p "${HOLD}"
 
-cp "src/pcp" "${DIST}"
+cp "src/$NAME" "${DIST}"
 cp "README" "${DIST}"
 cp "LICENSE" "${DIST}"
 
