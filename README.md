@@ -34,6 +34,7 @@
 
    No installation is necessary. But for convenience, enable execute permissions and copy the script to an executable path directory:
 
+   e.g. UNIX:
    ```
    chmod +x pcp
    cp pcp /usr/local/bin
@@ -41,7 +42,7 @@
 
 - ##### USAGE
 
-   To view the built-in POD-generated man page:
+   Please see the embedded man page for feature list, synopsis, and usage details:
 
    ```
    pcp --manpage
