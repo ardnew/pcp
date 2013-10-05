@@ -9,18 +9,18 @@ another command-line file copy script with other stuff
 
    The following Perl modules are required:
 
-   - Getopt::Long
-   - Pod::Usage
-   - File::Spec
-   - File::Path
-   - File::Find
-   - Time::HiRes
+     - Getopt::Long
+     - Pod::Usage
+     - File::Spec
+     - File::Path
+     - File::Find
+     - Time::HiRes
 
    And the following are optional:
 
-   - POSIX
-   - Term::ReadKey
-   - Benchmark
+     - POSIX
+     - Term::ReadKey
+     - Benchmark
 
    All of these packages are either included with Perl 5 or available for free from CPAN at <http://www.cpan.org>.
 
