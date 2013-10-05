@@ -1,9 +1,0 @@
-#
-# the following commands are used to run the test suites and log the results:
-#
-# args.pl:
-#
-#   cd ${PCCPROOT}/test
-#   F="args.pl"; D="log/$F"; mkdir -p "$D"; perl "$F" > "$D/`date`"
-#
-
