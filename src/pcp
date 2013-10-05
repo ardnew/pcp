@@ -1,11 +1,9 @@
 #!/usr/bin/env perl
 
 
-####[ pragmas ]###########################################################################
-
-
 use strict;
 use warnings;
+use diagnostics;
 
 
 ####[ constants ]#########################################################################
@@ -35,10 +33,13 @@ my $INVAL = -1; # invalid
 my $PROGS = '='; # symbol used to represent each step of the progress bar
 my $FCYCS = ' :: '; # string used to separate end from beginning of cycling filename
 
-my $FILEW = 14; # width of the filename window (chars)
+my $FILEW = 15; # width of the filename window (chars)
 my $PCTGW =  6; # width of the percentage string (chars)
 my $PBARW =  4; # minimum width required for progress bar (chars)
 my $MINSW = $FILEW + $PCTGW; # width of required status details (chars)
+
+my $DEENC = 'hex'; # default encoding for checksum output 
+my ($CKSUM, $ENCOD, $HALGO) = 0 .. 2;
 
 my $DEFTW = 60; # default terminal width if we can't find one from the system
 
@@ -88,6 +89,8 @@ my %optional_module =
   'POSIX'           => [ qw[] ],
   'Term::ReadKey'   => [ qw[] ],
   'Benchmark'       => [ qw[ cmpthese ] ],
+  'Digest::MD5'     => [ qw[] ],
+  'Digest::SHA'     => [ qw[] ],
 );
 
 my %option =
@@ -276,15 +279,16 @@ sub get_terminal_width;
 sub show_progress ($$$$$$$);
 
 #
-# arg1: bytes written
-# arg2: total bytes in file
-# arg3: time elapsed since copy began (in microseconds)
-# arg4: terminal width (in chars)
-# arg5: filehandle for output
-# arg6: filename string for file window
-# arg7: length of filename in arg6
+# determines the checksum hash function specified at command line, and returns an array
+# reference with structure:
 #
-sub show_completed ($$$$$$$);
+#   @[ hash_state_object, encoding, algorithm_name ] 
+#
+# if no checksum requested, returns undef.
+#
+# if an invalid function is specified, the program dies with error details. 
+#
+sub get_hash_function;
 
 
 ####[ main line ]#########################################################################
@@ -455,13 +459,15 @@ sub parse_options ($)
 
 sub configure
 {
-  $option{p_progr} = !!($option{p_progr} and not $option{q_quiet});  
+  $option{p_progr} = !!($option{p_progr} and not $option{q_quiet});
 
   $bitbucket = File::Spec->devnull; # UNIX: /dev/null
 
+  $option{c_cksum} = get_hash_function;
+
   print_message $ERROR, 
     "module not found: Benchmark is required for I/O buffer tests"
-      unless not $option{t_bench} or exists $optional_module{'Benchmark'};  
+      unless not $option{t_bench} or exists $optional_module{'Benchmark'};
 
 # DISABLED FOR NOW - the larger buffers seem to perform much MUCH better than the 
 # preferred page size reported by sysconf in the _SC_PAGESIZE field
@@ -644,10 +650,6 @@ sub copy_file ($$$$$$)
 {
   my ($scount, $stotal, $source, $target, $fdtype, $termsz) = @_;
 
-  use Digest::SHA;
-
-  my $state;  
-
   my $cwidth = int(log($stotal) / log(10) + 1); # log10(N)+1 = number of digits in N
 
   {
@@ -665,9 +667,6 @@ sub copy_file ($$$$$$)
       print_message $ERROR, "cannot copy: file exists: $target (use --force)"
         unless $option{f_force};
     }
-
-    $state = Digest::SHA->new(256);
-    print_message $GINFO, sprintf "source digest = %s", ($state = $state->addfile($target, 'b'))->hexdigest;
 
     print_message $ERROR, sprintf "cannot open file for reading: $source: $!"
       unless open $read, '<', $source;
@@ -688,6 +687,10 @@ sub copy_file ($$$$$$)
     my $tinit = undef;
     my $rotsn = (File::Spec->splitpath($source))[2];
     my $rotln = length $rotsn;
+
+    my $cksta = ${$option{c_cksum}}[$CKSUM] || undef;
+    my $ckenc = ${$option{c_cksum}}[$ENCOD] || undef;    
+    my $cknam = ${$option{c_cksum}}[$HALGO] || undef;    
 
     if ($option{t_bench})
     {
@@ -715,11 +718,9 @@ sub copy_file ($$$$$$)
           "[ FILE %*d / %*d | SIZE %*d bytes | BUFFER %d bytes ] %s -> %s", 
         $cwidth, $scount, $cwidth, $stotal, $cwidth, $rsize, $fsize, 
         $source, $target;
-    }
+    }    
 
     $tinit = [Time::HiRes::gettimeofday()];
-
-    $state = Digest::SHA->new(256);
 
 ###########################################################################[ DISK I/O ]>>>
     {
@@ -735,7 +736,7 @@ sub copy_file ($$$$$$)
         $cperr = sprintf "syswrite(): cannot write file: $target: $!" and last
           unless $t = syswrite $writ, $buff, $r - $w, $w;
 
-        $state->add($buff);
+        $cksta->add($buff) if defined $cksta;
 
         $wsize += $t;
 
@@ -756,9 +757,7 @@ sub copy_file ($$$$$$)
 
       redo;
     }
-###########################################################################[ DISK I/O ]<<<
-
-    print_message $GINFO, sprintf "target digest = %s", $state->hexdigest;
+###########################################################################[ DISK I/O ]<<<    
 
     if ($wsize > 0 and not $option{t_bench})
     {
@@ -767,6 +766,22 @@ sub copy_file ($$$$$$)
 
       print_message $NOTIC, 
         sprintf 'time spent copying = %.3fs', Time::HiRes::tv_interval($tinit);
+
+      if (defined $cksta)
+      {
+        my %digst = 
+        (
+          bin => sub { (shift)->digest() },
+          hex => sub { (shift)->hexdigest() },
+          b64 => sub { (shift)->b64digest() },
+        );
+
+        printf "[ %s | %s ] %s$/", $cknam, $ckenc, $digst{$ckenc}->($cksta)
+          unless $option{v_debug};
+
+        print_message $NOTIC,
+          sprintf "[ %s | %s ] %s", $cknam, $ckenc, $digst{$ckenc}->($cksta)
+      }
     }
 
     close $writ;
@@ -938,6 +953,45 @@ sub show_progress ($$$$$$$)
   select \*STDOUT if defined $termsz;
 }
 
+sub get_hash_function
+{
+  return undef unless $option{c_cksum};
+
+  my ($OX, $NX) = 0 .. 1;
+
+  my %s =
+  (
+       md5 => [ sub { Digest::MD5->new()    }, "MD5"     ],
+      sha1 => [ sub { Digest::SHA->new(1)   }, "SHA-1"   ],
+    sha224 => [ sub { Digest::SHA->new(224) }, "SHA-224" ],
+    sha256 => [ sub { Digest::SHA->new(256) }, "SHA-256" ],
+    sha384 => [ sub { Digest::SHA->new(384) }, "SHA-384" ],
+    sha512 => [ sub { Digest::SHA->new(512) }, "SHA-512" ],
+  );
+
+  my ($h, $e) = map { lc } split '-', $option{c_cksum};
+
+  if (exists $s{$h})
+  {
+    $e ||= $DEENC;
+
+    if ($e !~ /^(bin|hex|b64)$/i)
+    {
+      print_message $NOTIC, 
+        sprintf "unrecognized encoding: %s: using %s", $e, $DEENC;
+
+      $e = $DEENC;
+    }
+
+    return [ ${$s{$h}}[$OX]->(), $e, ${$s{$h}}[$NX] ];
+  }
+  else
+  {
+    print_message $ERROR,
+      "unrecognized hash function: $option{c_cksum} (try --manpage)";
+  }
+}
+
 
 __END__
 
@@ -974,11 +1028,18 @@ Read and write F<bytes> of data during the copy operation. The default buffer si
 
 =item B<--checksum=>F<hash>, B<-c> F<hash>
 
-(B<not implemented>) Print checksum of source file and resulting copied file using hash function F<hash>. The following functions are available:
+Print checksum of copied file using hash function F<hash>. The following functions are available:
 
-    city = CityHash (32-bit)
-    md5  = MD5
-    sha  = SHA-256
+    md5    = MD5
+    sha1   = SHA-1
+    sha224 = SHA-224
+    sha256 = SHA-256
+    sha384 = SHA-384 (system must support 64-bit types)
+    sha512 = SHA-512 (system must support 64-bit types)
+
+To specify the encoding used for the digest output, append '-bin' for binary, '-hex' for hexadecimal, or '-b64' for base64. If no encoding is specified, then binary encoding is used.
+
+For example, passing option "B<--checksum=>F<sha1-hex>" will compute the SHA-1 digest in hexadecimal format.
 
 =item B<--crc=>F<bits>, B<-r> F<bits>
 
