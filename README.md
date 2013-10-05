@@ -35,7 +35,7 @@
    No installation is necessary. But for convenience, enable execute permissions and copy the script to an executable path directory:
 
    ```
-   # example configuration for *nix systems:
+   # example configuration for UNIX systems
    chmod +x pcp
    cp pcp /usr/local/bin
    ```
