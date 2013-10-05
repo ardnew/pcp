@@ -24,6 +24,8 @@
    POSIX
    Term::ReadKey
    Benchmark
+   Digest::MD5
+   Digest::SHA
    ```
 
    All of these packages are either included with Perl 5 or available for free from CPAN at <http://www.cpan.org>.
