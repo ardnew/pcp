@@ -1062,9 +1062,9 @@ Print checksum of copied file using hash function F<hash>. The following functio
     sha384 = SHA-384 (system must support 64-bit types)
     sha512 = SHA-512 (system must support 64-bit types)
 
-To specify the encoding used for the digest output, append '-bin' for binary, '-hex' for hexadecimal, or '-b64' for base64. If no encoding is specified, then binary encoding is used.
+To specify the encoding used for the digest output, append '-bin' for binary, '-hex' for hexadecimal, or '-b64' for Base64. If no encoding is specified, then hexadecimal encoding is used.
 
-For example, passing option "B<--checksum=>F<sha1-hex>" will compute the SHA-1 digest in hexadecimal format.
+For example, passing option "B<--checksum=>F<sha1-b64>" will compute the SHA-1 digest in Base64 format.
 
 =item B<--crc=>F<bits>, B<-r> F<bits>
 
