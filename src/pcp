@@ -35,8 +35,8 @@ use diagnostics;
 
 my $PNAME = __PACKAGE__;
 
-my $PVERS = '__PCPVERS__'; # package version
-my $PDATE = '__PCPDATE__'; # package date and time
+my $PVERS = '1.0'; # package version
+my $PDATE = '10/07/2013 11:22:01 CDT'; # package date and time
 my $PVSTR = sprintf "%s version %s, %s", $PNAME, $PVERS, $PDATE;
 
 my $GINFO = 0; # "general" message level
