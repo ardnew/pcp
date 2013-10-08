@@ -55,14 +55,6 @@ my $ONOES = 1; # bad
 
 my $INVAL = -1; # invalid
 
-my $PROGS = '='; # symbol used to represent each step of the progress bar
-my $FCYCS = ' :: '; # string used to separate end from beginning of cycling filename
-
-my $FILEW = 15; # width of the filename window (chars)
-my $PCTGW =  6; # width of the percentage string (chars)
-my $PBARW =  4; # minimum width required for progress bar (chars)
-my $MINSW = $FILEW + $PCTGW; # width of required status details (chars)
-
 my $DEENC = 'hex'; # default encoding for checksum output 
 my ($CKSUM, $ENCOD, $HALGO) = 0 .. 2;
 
@@ -566,11 +558,13 @@ sub identify_paths (@)
         @_ > 1 
       || 
         # specified file is a directory -OR- specified name has a trailing slash
-        (-d $target || $target =~ /\/$/) 
+        (-d $target || $target =~ /\/$/) # TODO: fix me for non-unix filepaths
       || 
         # the specified source file is a directory
         (grep { -e && -d } @_) > 0 
     ];
+
+  $target =~ s/\/$//; # TODO: fix me for non-unix filepaths
 
   print_message $ERROR, 
     "target must be a directory when copying a directory or more than one file" 
@@ -629,24 +623,27 @@ sub identify_paths (@)
   # show the selected files and their destination if elevated --verbose
   if ($option{v_debug} > 1)
   {
-    sub nprefix ($) { (shift) ? "(DIR)" : "     " }
-    sub nsuffix ($) { (shift) ? "(NEW)" : "     " }
+    my $wsppad = "" .    ("      " x ((grep { -e && -d } keys %cppath) > 0));
+
+    sub nprefix ($$) { $_[0] ? "(DIR) " : $_[1] }
+    sub nsuffix ($$) { $_[0] ? " (NEW)" : $_[1] }
 
     # shows precisely the source and target file paths for every source file
     if ($option{v_debug} > 2)
     {
       printf "copy operations:$/";
-      printf "  %s %-50s$/%*s-=> %s$/$/", nprefix(-d $_), $_, 10, " ", $cppath{$_} 
-        for sort keys %cppath;
+      printf "  %s%-50s$/%*s%s-=> %s$/$/", 
+        nprefix((-d $_), $wsppad), $_, 4, " ", $wsppad, $cppath{$_} 
+          for sort keys %cppath;
     }
     # shows a list of source files and the target file/directory
     else
     {
       printf "source files:$/  %s$/$/", 
-        join("$/  ", map { nprefix(-d $_) . " $_" } sort keys %cppath);
+        join("$/  ", map { nprefix((-d $_), $wsppad) . "$_" } sort keys %cppath);
         
-      printf "target file:$/  %s %s %s$/$/", 
-        nprefix($fdtype), $target, nsuffix(not -e $target);
+      printf "target file:$/  %s%s%s$/$/", 
+        nprefix($fdtype, $wsppad), $target, nsuffix(not (-e $target), $wsppad);
     }
   }
 
@@ -710,6 +707,7 @@ sub copy_file ($$$$$$)
     my $iters = undef;
     my $cperr = undef; 
     my $tinit = undef;
+    my $telap = undef;
     my $rotsn = (File::Spec->splitpath($source))[2];
     my $rotln = length $rotsn;
 
@@ -783,14 +781,17 @@ sub copy_file ($$$$$$)
       redo;
     }
 ###########################################################################[ DISK I/O ]<<<    
+    
+    $telap = Time::HiRes::tv_interval($tinit);
 
     if ($wsize > 0 and not $option{t_bench})
     {
       print $/ if $option{v_debug} > 2  or $option{p_progr};
       print $/ if $option{v_debug} > 0 and $option{p_progr};
 
-      print_message $NOTIC, 
-        sprintf 'time spent copying = %.3fs', Time::HiRes::tv_interval($tinit);
+      print_message $NOTIC,
+        sprintf '%d bytes written in %.6f seconds (%d bytes/sec)', 
+          $wsize, $telap, $wsize / $telap;
 
       if (defined $cksta)
       {
@@ -801,11 +802,10 @@ sub copy_file ($$$$$$)
           b64 => sub { (shift)->b64digest() },
         );
 
-        printf "[ %s | %s ] %s$/", $cknam, $ckenc, $digst{$ckenc}->($cksta)
-          unless $option{v_debug};
+        my $digst = sprintf "[%s] %s", $cknam, $digst{$ckenc}->($cksta);
 
-        print_message $NOTIC,
-          sprintf "[ %s | %s ] %s", $cknam, $ckenc, $digst{$ckenc}->($cksta)
+        printf "%s$/", $digst unless $option{v_debug};
+        print_message $NOTIC, $digst;
       }
     }
 
@@ -821,7 +821,7 @@ sub test_buffers ($$$$$$)
   my ($scount, $stotal, $source, $target, $fdtype, $evcode, $termsz) = @_;
 
   # 
-  # define which buffers should be tested (in 1 bytes units)
+  # define which buffers should be tested (in 1 byte units)
   #
   @_ = 
   (
@@ -889,12 +889,7 @@ sub get_terminal_width
   my @srval = ();
 
   # width specified manually
-  if ($option{w_width})
-  {
-    $wchar = $option{w_width} < $MINSW ? $MINSW : $option{w_width};
-  }
-  # first try the most-portable Term::ReadKey
-  elsif (exists $optional_module{'Term::ReadKey'})
+  if (exists $optional_module{'Term::ReadKey'})
   {
     ($wchar, $hchar, $wpixl, $hpixl) = @_ 
       if 0 < scalar (@_ = Term::ReadKey::GetTerminalSize());
@@ -927,7 +922,15 @@ sub get_terminal_width
 
 sub show_progress ($$$$$$$)
 {
+  my $PROGS = '='; # symbol used to represent each step of the progress bar
+
+  my $PCTGW =  6; # width of the percentage string (chars)
+  my $PBARW =  4; # minimum width required for progress bar (chars)
+
   my ($bw, $bt, $es, $tw, $fh, $sr, $sl) = @_;
+
+  # the percentage window is the only *required* status detail
+  $tw = $tw < $PCTGW ? $PCTGW : $option{w_width} if $option{w_width};
 
   my $cf = select($fh); 
        $_= $|; 
@@ -942,37 +945,22 @@ sub show_progress ($$$$$$$)
   my $cr = $bw / $bt;         # completion ratio  
   my $pr = int($cr * 100);    # percent complete
 
-  # filename window
-  my $rn = int($es * 4) % $sl;
-  
-  if ($sl > $FILEW - 2)
-  {
-    $sr .= $FCYCS;
-    $sl += length $FCYCS;
-
-    $rn = int($es * 4) % $sl;
-    $sr = substr($sr, $rn) . substr($sr, 0, $rn);
-  }
-
-  $sr = sprintf "%*s", $FILEW - 2, substr $sr, 0, $FILEW - 2;
-  my $fw = sprintf '[%*s]', $FILEW - 2, $sr;
-
   # percentage window
   my $pw = sprintf '[%*s%%]', $PCTGW - 3, $pr; # -3 chars for "[%]"
 
   # determine if we have room for the progress bar
-  my $as = $tw - $MINSW; # remaining char space for progress bar
+  my $as = $tw - length $pw; # remaining char space for progress bar
 
   $as = $as < $PBARW ? 
               0 : # hide the progress bar if we don't have the minimum chars required
-        $as - 2 ;  # otherwise, we have room. subtract -2 chars for "[]"
+        $as - 2 ; # otherwise, we have room. subtract -2 chars for "[]"
 
   my $ni = int($cr * $as); # progress symbol count
 
   # progress window
   my $nw = $as > 0 ? sprintf '[%-*s]', $as, $PROGS x $ni : '';
 
-  printf $fh "\r%*s%-*s%*s", $FILEW, $fw, $as, $nw, $PCTGW, $pw;
+  printf $fh "\r%-*s%s", $as, $nw, $pw;
 
   # STDOUT gets closed after flush, so we need to reopen it for our caller
   select \*STDOUT if defined $termsz;
