@@ -13,7 +13,7 @@ my $scriptdir =
   dirname(File::Spec->rel2abs(__FILE__));
 
 my $resultdir = 
-  File::Spec->catdir(dirname($scriptdir), basename($scriptdir) . "-" . $ARGV[0]);
+  File::Spec->catdir(dirname($scriptdir), "pcp-" . $ARGV[0]);
 
 my $timestamp = `date "+%m/%d/%Y %R:%S %Z"`; chomp $timestamp;
 
