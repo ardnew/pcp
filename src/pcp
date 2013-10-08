@@ -146,12 +146,14 @@ sub init;
 #
 # print a list of messages based on increasing numeric importance level:
 #   
+#   $GINFO: print a general message regardless of verbosity
 #   $NOTIC: print a notice to STDOUT (if -v set) and continue program execution
 #   $WARNG: print a warning to STDERR and continue program execution
 #   $ERROR: print an error to STDERR and exit program with error code $ONOES
 #
 # arg1: message importance level
-# arg2: list of messages to print
+# arg2: list of messages to print (NOTE: if $arg1 is $GINFO or $NOTIC, the first element
+#       of @arg2 is interpreted as the prompt title)
 #
 sub print_message ($@);
 
@@ -363,11 +365,13 @@ sub print_message ($@)
 
   if ($ret == $GINFO)
   {
-    printf STDOUT "%s$/  %s$/$/", "info:", join "$/  ", @msg; 
+    my $pro = shift @msg;
+    printf STDOUT "%s$/  %s$/$/", $pro, join "$/  ", @msg; 
   }
   elsif ($ret == $NOTIC)
   {
-    printf STDOUT "%s$/  %s$/$/", "notice:", join "$/  ", @msg
+    my $pro = shift @msg;
+    printf STDOUT "%s$/  %s$/$/", $pro, join "$/  ", @msg
       if $option{v_debug};
   }
   elsif ($ret == $WARNG)
@@ -410,8 +414,8 @@ sub load_modules ($$)
     {
       delete $$mod{$pkg} if $req == $OPTMO;
 
-      ( sub { print_message $NOTIC, shift },
-        sub { print_message $ERROR, shift }, )[$req == $REQMO]->($msg);
+      ( sub { print_message $NOTIC, "NOTICE:", shift },
+        sub { print_message $ERROR,            shift }, )[$req == $REQMO]->($msg);
     }
   }
 }
@@ -514,7 +518,7 @@ if (0)
     "specified buffer too large: $option{b_buffs}: using $defbuff bytes"
       and $option{b_buffs} = $defbuff unless $option{b_buffs} < 0x7FFFFFFF;
 
-  print_message $NOTIC, "enabling --force for benchmarking tests"
+  print_message $NOTIC, "NOTICE:", "enabling --force for benchmarking tests"
     if $option{t_bench} and not $option{f_force} and $option{f_force} = 1;  
 }
 
@@ -571,7 +575,7 @@ sub identify_paths (@)
       if $fdtype == $DTYPE and -f $target;
 
   print_message $NOTIC, 
-    "enabling --force for benchmarking tests"
+    "NOTICE:", "enabling --force for benchmarking tests"
       if $option{t_bench} and not $option{f_force} and $option{f_force} = 1;     
 
   #
@@ -728,17 +732,15 @@ sub copy_file ($$$$$$)
         $iters = sprintf "ITERATIONS %d", $option{t_bench};
       }
 
-      print_message $GINFO,
-        sprintf "[ TEST %*d / %*d | SIZE %*d bytes | BUFFER %d bytes | %s ] %s -> %s",
-          $cwidth, $scount, $cwidth, $stotal, $cwidth, $rsize, $fsize, $iters, 
-          $source, $target unless not defined $iters;
+      printf "[ TEST %*d / %*d | SIZE %*d bytes | BUFFER %d bytes | %s | %s -> %s ]$/",
+        $cwidth, $scount, $cwidth, $stotal, $cwidth, $rsize, $fsize, $iters, 
+        $source, $target 
+          unless not defined $iters;
 
     }
-    elsif ($option{s_simul} or $option{v_debug} )
+    elsif ($option{v_debug} )
     {
-      print_message $NOTIC, 
-        sprintf 
-          "[ FILE %*d / %*d | SIZE %*d bytes | BUFFER %d bytes ] %s -> %s", 
+      printf "[ FILE %*d / %*d | SIZE %*d bytes | BUFFER %d bytes | %s -> %s ]$/", 
         $cwidth, $scount, $cwidth, $stotal, $cwidth, $rsize, $fsize, 
         $source, $target;
     }    
@@ -786,12 +788,10 @@ sub copy_file ($$$$$$)
 
     if ($wsize > 0 and not $option{t_bench})
     {
-      print $/ if $option{v_debug} > 2  or $option{p_progr};
       print $/ if $option{v_debug} > 0 and $option{p_progr};
 
-      print_message $NOTIC,
-        sprintf '%d bytes written in %.6f seconds (%d bytes/sec)', 
-          $wsize, $telap, $wsize / $telap;
+      printf "[ %d bytes written | %.6f seconds | %d bytes/sec ]$/", 
+        $wsize, $telap, $wsize / $telap if $option{v_debug} > 0;
 
       if (defined $cksta)
       {
@@ -802,11 +802,12 @@ sub copy_file ($$$$$$)
           b64 => sub { (shift)->b64digest() },
         );
 
-        my $digst = sprintf "[%s] %s", $cknam, $digst{$ckenc}->($cksta);
-
-        printf "%s$/", $digst unless $option{v_debug};
-        print_message $NOTIC, $digst;
+        printf "[ %s | %s ]$/",
+          $cknam, $digst{$ckenc}->($cksta);
       }
+
+      print $/ x 
+        (($option{p_progr} or defined $cksta) and $stotal > 1);
     }
 
     close $writ;
@@ -875,7 +876,7 @@ sub execute_system_program ($$$)
     scalar @line > 0 and last or @line = ();
   }
 
-  print_message $NOTIC, 
+  print_message $NOTIC, "NOTICE:",
     sprintf "no expected values returned from system command: `$name $args`"
       unless scalar @line > 0;
 
@@ -924,8 +925,8 @@ sub show_progress ($$$$$$$)
 {
   my $PROGS = '='; # symbol used to represent each step of the progress bar
 
-  my $PCTGW =  6; # width of the percentage string (chars)
-  my $PBARW =  4; # minimum width required for progress bar (chars)
+  my $PCTGW = 6; # width of the percentage string (chars)
+  my $PBARW = 4; # minimum width required for progress bar (chars)
 
   my ($bw, $bt, $es, $tw, $fh, $sr, $sl) = @_;
 
@@ -938,12 +939,8 @@ sub show_progress ($$$$$$$)
        $|= $_;
        select($_);
 
-  #
-  # below this line is a hot mess.
-  #
-
-  my $cr = $bw / $bt;         # completion ratio  
-  my $pr = int($cr * 100);    # percent complete
+  my $cr = $bw / $bt;      # completion ratio  
+  my $pr = int($cr * 100); # percent complete
 
   # percentage window
   my $pw = sprintf '[%*s%%]', $PCTGW - 3, $pr; # -3 chars for "[%]"
@@ -990,7 +987,7 @@ sub get_hash_function
 
     if ($e !~ /^(bin|hex|b64)$/i)
     {
-      print_message $NOTIC, 
+      print_message $NOTIC, "NOTICE:",
         sprintf "unrecognized encoding: %s: using %s", $e, $DEENC;
 
       $e = $DEENC;
