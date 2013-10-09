@@ -80,6 +80,13 @@ my %STATN = map { $_ => $.++ } @STATT;
 
 my ($VOLIX, $DIRIX, $FILIX) = 0 .. 2; # indices for returned File::Spec->splitpath list
 
+my %ENCOD =
+(
+  bin => 'binary',
+  hex => 'hexadecimal',
+  b64 => 'Base64',
+);
+
 
 ####[ globals ]###########################################################################
 
@@ -238,7 +245,7 @@ sub identify_paths (@);
 sub create_directories (@);
 
 #
-# performs a block-level copy of one file
+# performs a copy of one file
 #
 # arg1: source file counter
 # arg2: total number of source files
@@ -296,6 +303,14 @@ sub get_terminal_width;
 # arg7: length of filename in arg6
 #
 sub show_progress ($$$$$$$);
+
+#
+# strings for output details
+#
+sub header (@);
+sub progress (@);
+sub summary (@);
+sub checksum (@);
 
 #
 # determines the checksum hash function specified at command line, and returns an array
@@ -725,24 +740,22 @@ sub copy_file ($$$$$$)
 
       if ($option{v_debug})
       {
-        $iters = sprintf "ITERATION %d / %d", $tcount + 1, $option{t_bench};
+        $iters = sprintf "test %d / %d", $tcount + 1, $option{t_bench};
       }
       elsif ($tcount == 0)
       {
-        $iters = sprintf "ITERATIONS %d", $option{t_bench};
+        $iters = sprintf "%d test(s)", $option{t_bench};
       }
 
-      printf "[ TEST %*d / %*d | SIZE %*d bytes | BUFFER %d bytes | %s | %s -> %s ]$/",
-        $cwidth, $scount, $cwidth, $stotal, $cwidth, $rsize, $fsize, $iters, 
-        $source, $target 
+      printf "%s$/", header("test", 
+        $cwidth, $scount, $stotal, $rsize, $fsize, $iters, $source, $target)
           unless not defined $iters;
 
     }
     elsif ($option{v_debug} )
     {
-      printf "[ FILE %*d / %*d | SIZE %*d bytes | BUFFER %d bytes | %s -> %s ]$/", 
-        $cwidth, $scount, $cwidth, $stotal, $cwidth, $rsize, $fsize, 
-        $source, $target;
+      printf "%s$/", header("file",
+        $cwidth, $scount, $stotal, $rsize, $fsize, undef, $source, $target);
     }    
 
     $tinit = [Time::HiRes::gettimeofday()];
@@ -774,8 +787,8 @@ sub copy_file ($$$$$$)
         {
           if ($option{v_debug} > 2)
           {
-            printf "      [ %*d / %*d ] ( %6.2f%% )$/", 
-              $width, $wsize, $width, $rsize, $wsize / $rsize * 100.0;
+            printf "%*s[ %*d / %*d ] ( %6.2f%% )$/", 
+              6, "", $width, $wsize, $width, $rsize, $wsize / $rsize * 100.0;
           }
         }
       }
@@ -788,10 +801,11 @@ sub copy_file ($$$$$$)
 
     if ($wsize > 0 and not $option{t_bench})
     {
-      print $/ if $option{v_debug} > 0 and $option{p_progr};
+      print $/ 
+        if $option{v_debug} > 0 and $option{p_progr};
 
-      printf "[ %d bytes written | %.6f seconds | %d bytes/sec ]$/", 
-        $wsize, $telap, $wsize / $telap if $option{v_debug} > 0;
+      printf "%s$/", summary($wsize, $telap)
+        if $option{v_debug} > 0;
 
       if (defined $cksta)
       {
@@ -802,12 +816,12 @@ sub copy_file ($$$$$$)
           b64 => sub { (shift)->b64digest() },
         );
 
-        printf "[ %s | %s ]$/",
-          $cknam, $digst{$ckenc}->($cksta);
+        printf "%s$/", checksum($cknam, 
+          $digst{$ckenc}->($cksta), (File::Spec->splitpath($target))[$FILIX], $ckenc);
       }
 
-      print $/ x 
-        (($option{p_progr} or defined $cksta) and $stotal > 1);
+      print $/ 
+        if $stotal > 1 and $option{p_progr} or $option{v_debug} > 0;
     }
 
     close $writ;
@@ -963,6 +977,51 @@ sub show_progress ($$$$$$$)
   select \*STDOUT if defined $termsz;
 }
 
+sub header (@)
+{
+  my ($title, $width, $count, $total, $rsize, $fsize, $iters, $srcfn, $dstfn) = @_;
+             
+  return 
+    sprintf "[ %s %*d / %*d ] %s (%*d bytes)",
+      $title, 
+      $width, 
+      $count, 
+      $width, 
+      $total, 
+      $srcfn, 
+      $width, 
+      $rsize, 
+      #defined $iters ? "[ $iters ]" : "",
+}
+
+sub progress (@)
+{
+
+}
+
+sub summary (@)
+{
+  my ($wrote, $elaps) = @_;
+
+  return 
+    sprintf "%d bytes written in %.6f seconds (%d bytes/sec)", 
+      $wrote, 
+      $elaps, 
+      $wrote / $elaps,
+}
+
+sub checksum (@)
+{
+  my ($cksum, $digst, $dstfn, $ckenc) = @_;
+
+  return
+    sprintf "%s - %s (%s)",
+      $digst,
+      $dstfn,
+      $cksum,
+      #$ENCOD{$ckenc},
+}
+
 sub get_hash_function
 {
   return undef unless $option{c_cksum};
@@ -1024,7 +1083,7 @@ B<pcp> [ options ] [ B<-?bcdfhimpqrsuvw> ] F<source-file> F<...> F<target-direct
 
 =head1 DESCRIPTION
 
-B<pcp> will perform a block-level copy on a set of files or directories from one location to another, and it can display a real-time progress indicator with checksum details of the resulting copy operation.
+B<pcp> will copy a set of files or directories from one location to another, and it can display a real-time progress indicator with checksum details of the resulting copy operation.
 
 The program does not currently support asynchronous I/O, so copy operations from one disk to another may be stupid slow.
 
