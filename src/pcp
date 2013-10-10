@@ -60,6 +60,19 @@ my ($CKSUM, $ENCOD, $HALGO) = 0 .. 2;
 
 my $DEFTW = 60; # default terminal width if we can't find one from the system
 
+my %COLOR =
+(
+  reset      => "\033[00m",
+  black      => "\033[90m",
+  red        => "\033[91m",
+  green      => "\033[92m",
+  yellow     => "\033[93m",
+  blue       => "\033[94m",
+  purple     => "\033[95m",
+  turquoise  => "\033[96m",
+  white      => "\033[97m",
+); 
+
 my @STATT = 
 (
   'dev', # device number of filesystem
@@ -957,10 +970,18 @@ sub show_progress ($$$$$$$)
   my $pr = int($cr * 100); # percent complete
 
   # percentage window
-  my $pw = sprintf '[%*s%%]', $PCTGW - 3, $pr; # -3 chars for "[%]"
+  my $pw = 
+    sprintf '%s[%s%*s%%%s]%s', 
+
+
+      $COLOR{yellow}, 
+      $COLOR{red},
+      $PCTGW - 3, $pr, # -3 chars for "[%]"      
+      $COLOR{yellow}, 
+      $COLOR{reset};
 
   # determine if we have room for the progress bar
-  my $as = $tw - length $pw; # remaining char space for progress bar
+  my $as = $tw - 6; # remaining char space for progress bar
 
   $as = $as < $PBARW ? 
               0 : # hide the progress bar if we don't have the minimum chars required
@@ -969,7 +990,15 @@ sub show_progress ($$$$$$$)
   my $ni = int($cr * $as); # progress symbol count
 
   # progress window
-  my $nw = $as > 0 ? sprintf '[%-*s]', $as, $PROGS x $ni : '';
+  my $nw =
+    sprintf "%s[%s%-*s%s]%s", 
+      $COLOR{yellow}, 
+      $COLOR{black},
+      $as, 
+      $as > 0 ? $PROGS x $ni : '', 
+      $COLOR{yellow}, 
+      $COLOR{reset};
+
 
   printf $fh "\r%-*s%s", $as, $nw, $pw;
 
@@ -980,7 +1009,7 @@ sub show_progress ($$$$$$$)
 sub header (@)
 {
   my ($title, $width, $count, $total, $rsize, $fsize, $iters, $srcfn, $dstfn) = @_;
-             
+
   return 
     sprintf "[ %s %*d / %*d ] %s (%*d bytes)",
       $title, 
