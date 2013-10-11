@@ -58,6 +58,11 @@ my $INVAL = -1; # invalid
 my $DEENC = 'hex'; # default encoding for checksum output 
 my ($CKSUM, $ENCOD, $HALGO) = 0 .. 2;
 
+my $PROGS = '='; # symbol used to represent each step of the progress bar
+
+my $PCTGW = 6; # width of the percentage string  e.g. "[ 42%]" (chars)
+my $PBARW = 4; # minimum width required for progress bar e.g. "[**]" (chars)
+
 my $DEFTW = 60; # default terminal width if we can't find one from the system
 
 my $RESET = "\e[0m"; # ANSI text reset
@@ -130,6 +135,87 @@ my %COLOR =
   ON_IWHITE   => sub { "\e[0;107m".(shift).$RESET }, # white
 );
 
+my %THEME = 
+(
+  DEFAULT =>
+  {
+    header      => "ICYAN",
+    detail      => "WHITE",
+    bracket     => "CYAN",
+    background  => undef,
+  },
+  FLASHGORDON =>
+  {
+    header      => "IYELLOW",
+    detail      => "RED",
+    bracket     => "YELLOW",
+    background  => undef,
+  },
+  GASHFLORDON =>
+  {
+    header      => "BIRED",
+    detail      => "YELLOW",
+    bracket     => "RED",
+    background  => undef,
+  },    
+  BLACK => 
+  {
+    header      => "IBLACK",
+    detail      => "BLACK",
+    bracket     => "IBLACK",
+    background  => undef,
+  },
+  RED => 
+  {
+    header      => "IRED",
+    detail      => "RED",
+    bracket     => "IRED",
+    background  => undef,
+  },
+  GREEN => 
+  {
+    header      => "IGREEN",
+    detail      => "GREEN",
+    bracket     => "IGREEN",
+    background  => undef,
+  },
+  YELLOW => 
+  {
+    header      => "IYELLOW",
+    detail      => "YELLOW",
+    bracket     => "IYELLOW",
+    background  => undef,
+  },
+  BLUE => 
+  {
+    header      => "IBLUE",
+    detail      => "BLUE",
+    bracket     => "IBLUE",
+    background  => undef,
+  },
+  PURPLE => 
+  {
+    header      => "IPURPLE",
+    detail      => "PURPLE",
+    bracket     => "IPURPLE",
+    background  => undef,
+  },
+  CYAN => 
+  {
+    header      => "ICYAN",
+    detail      => "CYAN",
+    bracket     => "ICYAN",
+    background  => undef,
+  },
+  WHITE => 
+  {
+    header      => "IWHITE",
+    detail      => "WHITE",
+    bracket     => "IWHITE",
+    background  => undef,
+  },
+);
+
 my @STATT = 
 (
   'dev', # device number of filesystem
@@ -181,7 +267,7 @@ my %required_module =
 my %optional_module =
 (
   'POSIX'           => [ qw[] ],
-  'Term::ReadKey'   => [ qw[] ],
+  'Term::ReadsKey'   => [ qw[] ],
   'Benchmark'       => [ qw[ cmpthese ] ],
   'Digest::MD5'     => [ qw[] ],
   'Digest::SHA'     => [ qw[] ],
@@ -211,6 +297,8 @@ my %pod =
   manpage  => 2,
 );
 
+my %theme = ();
+
 
 ####[ forward declarations ]##############################################################
 
@@ -228,14 +316,21 @@ sub init;
 sub sigtrap;
 
 #
-# returns a colorized string enclosed between a leading user-specified ANSI escape code
-# and a trailing ANSI reset sequence. if the first argument is not recognized, the string
-# is returned with reset sequences before and after
+# returns an ANSI colorized string with a trailing reset sequence 
 #
-# see %COLOR hash for recognized color constants
+#   see: %COLOR hash for recognized color constants
 #
-sub color ($$);
-sub randcolor ($); # picks a random color for each character in the input string
+# arg1: string to color
+# arg2: foreground color name (undef for none)
+# arg3: background color name (undef for none)
+#
+sub color ($$$);
+sub spectralchars ($); # picks a random color for each character in the input string
+
+#
+# accepts a theme name as parameter and configures the global %theme hash accordingly
+#
+sub set_theme ($);
 
 #
 # print a list of messages based on increasing numeric importance level:
@@ -395,7 +490,7 @@ sub show_progress ($$$$$$$);
 # strings for output details
 #
 sub header (@);
-sub progress (@);
+sub status (@);
 sub summary (@);
 sub checksum (@);
 
@@ -459,31 +554,62 @@ sub init
 {
   $SIG{TERM} = $SIG{INT} = $SIG{QUIT} = $SIG{HUP} = sub { sigtrap }; # LOL
 
+  set_theme "default";
+  #set_theme "flashgordon";
+  #set_theme "gashflordon";
+
   load_modules 1, \%bootstrp_module;
-  parse_options \%option;
+  parse_options \%option;   
 }
 
 sub sigtrap
 {
-  select \*STDOUT; print randcolor "$/$/it's a trap$/$/";
+  select \*STDOUT; print spectralchars "$/$/it's a trap$/$/";
   exit;
 }
 
-sub color ($$)
+sub color ($$$)
 {
-  my ($col, $str) = @_; $col = uc $col;
+  my ($str, $fgc, $bgc) = @_; 
 
-  return (exists $COLOR{$col} ? $COLOR{$col} : $COLOR{RESET})->($str);
+  $bgc = $COLOR{uc ($bgc || $fgc || "RESET")};
+  $fgc = $COLOR{uc ($fgc || "RESET")};
+
+  return $fgc->($bgc->($str));
 }
 
-sub randcolor ($)
+sub spectralchars ($)
 {
   my $str = shift @_;
 
-  @_ = grep { not /on_|black|^U/i } keys %COLOR;
-  #@_ = grep { not /on_|^u/i } grep { /blue|cyan/i } keys %COLOR;
+  # do not use the background colors or the underlined styles 
+  @_ = grep { not /on_|^U/i } keys %COLOR;
 
-  return join '', map { color $_[int(rand(@_))], $_ } split //, $str;
+  # do not use black colors because consoles typically have black colored backgrounds
+  @_ = grep { not /black/i } @_;
+
+  return join '', map { color $_, $_[int(rand(@_))], undef } split //, $str;
+}
+
+sub set_theme ($)
+{
+  my $name = uc shift; chomp $name;
+
+  if (exists $THEME{$name})
+  {
+    %theme = %{$THEME{$name}}
+  }
+  else
+  {
+    %theme =
+    ( 
+      # sub color ($$$) handles these undefs gracefully
+      header      => undef, 
+      detail      => undef,
+      bracket     => undef,
+      background  => undef,
+    );
+  }
 }
 
 sub print_message ($@)
@@ -493,26 +619,36 @@ sub print_message ($@)
   if ($ret == $GINFO)
   {
     my $pro = shift @msg;
-    printf STDOUT "%s$/  %s$/$/", $pro, join "$/  ", @msg; 
+    printf STDOUT "%s$/  %s$/$/", 
+      color($pro, $theme{header}, $theme{background}), 
+      join "$/  ", map { color $_, $theme{detail}, $theme{background} } @msg; 
   }
   elsif ($ret == $NOTIC)
   {
     my $pro = shift @msg;
-    printf STDOUT "%s$/  %s$/$/", $pro, join "$/  ", @msg
-      if $option{v_debug};
+    printf STDOUT "%s$/  %s$/$/", 
+      color($pro, $theme{header}, $theme{background}),
+      join "$/  ", map { color $_, $theme{detail}, $theme{background} } @msg
+        if $option{v_debug} > 1;
   }
   elsif ($ret == $WARNG)
   {
-    printf STDERR "%s$/  %s$/$/", "warning:", join "$/  ", @msg; 
+    printf STDERR "%s$/  %s$/$/", 
+      color("warning:", $theme{header}, $theme{background}), 
+      join "$/  ", map { color $_, $theme{detail}, $theme{background} } @msg;
   }
   elsif ($ret == $ERROR)
   {
-    printf STDERR "%s$/  %s$/$/", "error:", join "$/  ", @msg;
+    printf STDERR "%s$/  %s$/$/", 
+      color("error:", $theme{header}, $theme{background}),     
+      join "$/  ", map { color $_, $theme{detail}, $theme{background} } @msg;
     exit $ONOES;
   }
   else
   {
-    printf STDERR "[%s]$/  %s$/$/", $0, join "$/  ", @msg;
+    printf STDERR "[%s]$/  %s$/$/", 
+      color("$0:", $theme{header}, $theme{background}),     
+      join "$/  ", map { color $_, $theme{detail}, $theme{background} } @msg;
   }
 }
 
@@ -541,7 +677,7 @@ sub load_modules ($$)
     {
       delete $$mod{$pkg} if $req == $OPTMO;
 
-      ( sub { print_message $NOTIC, "NOTICE:", shift },
+      ( sub { print_message $NOTIC, "notice:", shift },
         sub { print_message $ERROR,            shift }, )[$req == $REQMO]->($msg);
     }
   }
@@ -552,17 +688,35 @@ sub show_modules ($$$)
   my ($req, $gid, %mod) = (shift, shift, %{(shift)});
 
   my $wid = 0;
-  (length > $wid) && ($wid = length) for keys %mod;
+  (length(
 
-  printf "%s %smodules:$/", 
-    $req == $REQMO ? "required" : "optional",
-    defined $gid ? $gid . " " : ""; 
+color($_, $theme{detail}, $theme{background})
+
+    ) > $wid) && ($wid = length(
+
+color($_, $theme{detail}, $theme{background})
+
+    )) for keys %mod;
+
+  printf "%s$/",
+    color(
+      sprintf("%s %smodules:", 
+        $req == $REQMO ? "required" : "optional",
+        defined $gid ? $gid . " " : ""), 
+      $theme{header},
+      $theme{background});
   
-  printf "  %${wid}s$/$/", "none" and return unless keys %mod > 0;
+  printf "  %${wid}s$/$/", color("none", $theme{detail}, $theme{background}) and return 
+    unless keys %mod > 0;
 
   while (my ($pkg, @sym) = map { (ref) ? @{$_} : $_ } each %mod)
   {
-    printf "  %${wid}s => [%s]$/", $pkg, @sym ? " @sym " : "";
+    printf "  %${wid}s%s%s%s%s$/", 
+      color($pkg, $theme{detail}, $theme{background}),
+      color(' => ', $theme{bracket}, $theme{background}),
+      color('[', $theme{bracket}, $theme{background}),
+      color(@sym ? " @sym " : "", $theme{detail}, $theme{background}),
+      color(']', $theme{bracket}, $theme{background});
   }
   print $/;
 }
@@ -593,15 +747,27 @@ sub parse_options ($)
 
   if ($$opt{v_debug} > 1)
   {
-    printf "$/%s$/$/", $PVSTR;
+    printf "$/%s$/$/", 
+      color($PVSTR, $theme{header}, $theme{background});
 
-    printf "command-line options:$/";
+    printf "%s$/", 
+      color("command-line options:", $theme{header}, $theme{background});
 
     while (my ($k, $v) = each %{$opt}) 
     { 
-      printf "%9s = %-s$/", $k, $v; 
+      printf "  %s%s%-s$/", 
+        color($k,    $theme{detail}, $theme{background}), 
+        color(' = ', $theme{bracket}, $theme{background}),
+        color($v,    $theme{detail}, $theme{background}); 
     }
-    printf "%9s = (%-s)$/$/", 'args', join(', ', @ARGV);
+    printf "     %s%s%s%-s%s$/$/", 
+      color('args', $theme{detail}, $theme{background}), 
+      color(' = ', $theme{bracket}, $theme{background}),
+      color('(', $theme{bracket}, $theme{background}),
+      join(
+        color(', ', $theme{bracket}, $theme{background}), 
+        map { color $_, $theme{detail}, $theme{background} } @ARGV),
+      color(')', $theme{bracket}, $theme{background});
   }  
 }
 
@@ -645,8 +811,9 @@ if (0)
     "specified buffer too large: $option{b_buffs}: using $defbuff bytes"
       and $option{b_buffs} = $defbuff unless $option{b_buffs} < 0x7FFFFFFF;
 
-  print_message $NOTIC, "NOTICE:", "enabling --force for benchmarking tests"
-    if $option{t_bench} and not $option{f_force} and $option{f_force} = 1;  
+  print_message $NOTIC, "notice:", 
+    "enabling --force for benchmarking tests"
+      if $option{t_bench} and not $option{f_force} and $option{f_force} = 1;  
 }
 
 sub pod ($$)
@@ -699,11 +866,7 @@ sub identify_paths (@)
 
   print_message $ERROR, 
     "target must be a directory when copying a directory or more than one file" 
-      if $fdtype == $DTYPE and -f $target;
-
-  print_message $NOTIC, 
-    "NOTICE:", "enabling --force for benchmarking tests"
-      if $option{t_bench} and not $option{f_force} and $option{f_force} = 1;     
+      if $fdtype == $DTYPE and -f $target;  
 
   #
   # the { key => val } structure of a hash is perfect for defining primitive copy
@@ -755,26 +918,44 @@ sub identify_paths (@)
   if ($option{v_debug} > 1)
   {
     my $wsppad = "" .    ("      " x ((grep { -e && -d } keys %cppath) > 0));
-
-    sub nprefix ($$) { $_[0] ? "(DIR) " : $_[1] }
-    sub nsuffix ($$) { $_[0] ? " (NEW)" : $_[1] }
+    sub tag ($)
+    {
+      sprintf '%s%s%s',
+        color('(',     $theme{bracket}, $theme{background}),
+        color((shift), $theme{header},  $theme{background}),
+        color(')',     $theme{bracket}, $theme{background})
+    }
+    sub nprefix ($$) { $_[0] ? tag("DIR")." " : $_[1] }
+    sub nsuffix ($$) { $_[0] ? " ".tag("NEW") : $_[1] }
 
     # shows precisely the source and target file paths for every source file
     if ($option{v_debug} > 2)
     {
-      printf "copy operations:$/";
-      printf "  %s%-50s$/%*s%s-=> %s$/$/", 
-        nprefix((-d $_), $wsppad), $_, 4, " ", $wsppad, $cppath{$_} 
+      printf "%s$/", color('copy operations:', $theme{header}, $theme{background});
+
+      printf "  %s%-s$/%*s%s%s%s$/$/", 
+        nprefix((-d $_), $wsppad), 
+        color($_, $theme{detail}, $theme{background}), 
+        4, " ", 
+        $wsppad, 
+        color('-=> ', $theme{bracket}, $theme{background}),
+        color($cppath{$_}, $theme{detail}, $theme{background})
           for sort keys %cppath;
     }
     # shows a list of source files and the target file/directory
     else
     {
-      printf "source files:$/  %s$/$/", 
-        join("$/  ", map { nprefix((-d $_), $wsppad) . "$_" } sort keys %cppath);
+      printf "%s$/  %s$/$/", 
+        color('source files:', $theme{header}, $theme{background}),
+        join("$/  ", map { 
+          nprefix((-d $_), $wsppad) . color($_, $theme{detail}, $theme{background}) } 
+            sort keys %cppath);
         
-      printf "target file:$/  %s%s%s$/$/", 
-        nprefix($fdtype, $wsppad), $target, nsuffix(not (-e $target), $wsppad);
+      printf "%s$/  %s%s%s$/$/", 
+        color('target file:', $theme{header}, $theme{background}),
+        nprefix($fdtype, $wsppad), 
+        color($target, $theme{detail}, $theme{background}),
+        nsuffix(not (-e $target), $wsppad);
     }
   }
 
@@ -791,10 +972,10 @@ sub create_directories (@)
   foreach my $directory (@_)
   {
     print_message $ERROR, 
-      sprintf "cannot create directory: $directory: $!"
+      "cannot create directory: $directory: $!"
         unless -d $directory or File::Path::mkpath($directory);
     print_message $ERROR, 
-      sprintf "invalid path: cannot write to directory: $directory"
+      "invalid path: cannot write to directory: $directory"
         unless -w $directory;
   }
 }
@@ -802,6 +983,8 @@ sub create_directories (@)
 sub copy_file ($$$$$$)
 {
   my ($scount, $stotal, $source, $target, $fdtype, $termsz) = @_;
+
+  $termsz = $termsz < $PCTGW ? $PCTGW : $option{w_width} if $option{w_width};
 
   my $cwidth = int(log($stotal) / log(10) + 1); # log10(N)+1 = number of digits in N
 
@@ -821,14 +1004,14 @@ sub copy_file ($$$$$$)
         unless $option{f_force};
     }
 
-    print_message $ERROR, sprintf "cannot open file for reading: $source: $!"
+    print_message $ERROR, "cannot open file for reading: $source: $!"
       unless open $read, '<', $source;
-    print_message $ERROR, sprintf "cannot put file in binary mode: $source: $!"
+    print_message $ERROR, "cannot put file in binary mode: $source: $!"
       unless binmode $read;
 
-    print_message $ERROR, sprintf "cannot open file for writing: $target: $!"
+    print_message $ERROR, "cannot open file for writing: $target: $!"
       unless open $writ, '>', $target;
-    print_message $ERROR, sprintf "cannot put file in binary mode: $target: $!"
+    print_message $ERROR, "cannot put file in binary mode: $target: $!"
       unless binmode $writ;
 
     my $fsize = $option{t_bench} ? $defbuff : $option{b_buffs} || $defbuff;
@@ -852,11 +1035,20 @@ sub copy_file ($$$$$$)
 
       if ($option{v_debug})
       {
-        $iters = sprintf "test %d / %d", $tcount + 1, $option{t_bench};
+        $iters = sprintf "%s %d %s %d", 
+          color('test', $theme{header}, $theme{background}), 
+          color($tcount + 1, $theme{detail}, $theme{background}), 
+          color('/', $theme{bracket}, $theme{background}), 
+          color($option{t_bench}, $theme{detail}, $theme{background}); 
       }
       elsif ($tcount == 0)
       {
-        $iters = sprintf "%d test(s)", $option{t_bench};
+        $iters = sprintf "%d %s%s%s%s", 
+          color($option{t_bench}, $theme{detail}, $theme{background}), 
+          color('test', $theme{header}, $theme{background}), 
+          color('(', $theme{bracket}, $theme{background}), 
+          color('s', $theme{header}, $theme{background}), 
+          color(')', $theme{bracket}, $theme{background}); 
       }
 
       printf "%s$/", header("test", 
@@ -1002,8 +1194,8 @@ sub execute_system_program ($$$)
     scalar @line > 0 and last or @line = ();
   }
 
-  print_message $NOTIC, "NOTICE:",
-    sprintf "no expected values returned from system command: `$name $args`"
+  print_message $WARNG,
+    "no expected values returned from system command: `$name $args`"
       unless scalar @line > 0;
 
   return @line;
@@ -1049,15 +1241,7 @@ sub get_terminal_width
 
 sub show_progress ($$$$$$$)
 {
-  my $PROGS = '='; # symbol used to represent each step of the progress bar
-
-  my $PCTGW = 6; # width of the percentage string  e.g. "[ 42%]" (chars)
-  my $PBARW = 4; # minimum width required for progress bar e.g. "[**]" (chars)
-
   my ($bw, $bt, $es, $tw, $fh, $sr, $sl) = @_;
-
-  # the percentage window is the only *required* status detail
-  $tw = $tw < $PCTGW ? $PCTGW : $option{w_width} if $option{w_width};
 
   my $cf = select($fh); 
        $_= $|; 
@@ -1068,83 +1252,7 @@ sub show_progress ($$$$$$$)
   my $cr = $bw / $bt;      # completion ratio  
   my $pr = int($cr * 100); # percent complete
 
-  my $bracket_color = 'red';#'blue';
-  my $percentage_color = 'yellow';#'cyan';
-  my $progress_color = 'yellow';#'cyan';
-  my $background_color = '';#'on_blue';
-  my $show_background = 0;
-
-  # percentage window
-  my $pw = 
-    sprintf '%s%s%s', 
-      color($bracket_color, 
-        $show_background 
-        ?
-          color($background_color, '[') 
-        : 
-          '['
-      ),
-      color($percentage_color, 
-        $show_background
-        ?
-          color($background_color, 
-            sprintf "%*s", 
-              $PCTGW - 2, # -2 for brackets [] in e.g. "[ 42%]"
-              "$pr%") 
-        :
-          sprintf "%*s", 
-            $PCTGW - 2, # -2 for brackets [] in e.g. "[ 42%]"
-            "$pr%"
-      ), 
-      color($bracket_color, 
-        $show_background
-        ?
-          color($background_color, ']')
-        : 
-          ']'
-      );
-
-  # determine if we have room for the progress bar
-  my $as = $tw - $PCTGW; # remaining char space for progress bar
-
-  $as = $as < $PBARW ? 
-              0 : # hide the progress bar if we don't have the minimum chars required
-        $as - 2 ; # otherwise, we have room. subtract -2 chars for "[]"
-
-  my $ni = int($cr * $as); # progress symbol count
-
-  # progress window
-  my $nw =
-    sprintf '%s%s%s', 
-      color($bracket_color, 
-        $show_background
-        ?
-          color($background_color, '[')
-        :
-          '['
-      ), 
-      randcolor(#$progress_color, 
-        $show_background
-        ?
-          color($background_color, 
-            sprintf "%-*s", 
-              $as, 
-              $as > 0 ? ($PROGS x $ni) . (' ' x ($as - $ni)) : '')
-        :
-          sprintf "%-*s", 
-            $as, 
-            $as > 0 ? ($PROGS x $ni) . (' ' x ($as - $ni)) : ''          
-      ), 
-      color($bracket_color, 
-        $show_background
-        ?
-          color($background_color, ']')
-        :
-          ']'
-      );
-
-
-  printf $fh "\r%-*s%s", $as, $nw, $pw;
+  printf $fh "\r%s", status($tw, $cr, $pr);
 
   # STDOUT gets closed after flush, so we need to reopen it for our caller
   select \*STDOUT if defined $termsz;
@@ -1155,21 +1263,83 @@ sub header (@)
   my ($title, $width, $count, $total, $rsize, $fsize, $iters, $srcfn, $dstfn) = @_;
 
   return 
-    sprintf "[ %s %*d / %*d ] %s (%*d bytes)",
-      $title, 
-      $width, 
-      $count, 
-      $width, 
-      $total, 
-      $srcfn, 
-      $width, 
-      $rsize, 
+    sprintf "%s%s%s%s%s%s%s%s%s%s%s",
+      color('[', $theme{bracket}, $theme{background}),
+      color(" $title ", $theme{header}, $theme{background}),
+      color($count, $theme{header}, $theme{background}),
+      color(' / ', $theme{bracket}, $theme{background}),
+      color($total, $theme{header}, $theme{background}),
+      color(' ] ', $theme{bracket}, $theme{background}),
+      color($srcfn, $theme{detail}, $theme{background}),
+      color(' (', $theme{bracket}, $theme{background}),
+      color($rsize, $theme{detail}, $theme{background}),
+      color(' bytes', $theme{header}, $theme{background}),
+      color(')', $theme{bracket}, $theme{background}),
       #defined $iters ? "[ $iters ]" : "",
 }
 
-sub progress (@)
+sub status (@)
 {
+  my ($tw, $cr, $pr) = @_;
 
+# percentage window
+  my $pw = 
+    sprintf '%s%s%s', 
+
+      color(
+        '[', 
+        $theme{bracket},
+        $theme{background}), 
+
+      color(
+        sprintf("%*s", 
+                $PCTGW - 2, # -2 for brackets [] in e.g. "[ 42%]"
+                "$pr%"), 
+        $theme{header},
+        $theme{background}), 
+
+      color(
+        ']',
+        $theme{bracket},        
+        $theme{background});
+
+
+  # determine if we have room for the progress bar
+  my $as = $tw - $PCTGW; # remaining char space for progress bar
+
+  $as = $as < $PBARW ? 
+              0 : # hide the progress bar if we don't have the minimum chars required
+        $as - 2 ; # otherwise, we have room. subtract -2 chars for "[]"
+
+  my $ni = int($cr * $as); # progress symbol count  
+  
+  # progress window
+  my $nw = 
+    sprintf '%s%s%s', 
+
+      color(
+        '[',
+        $theme{bracket},
+        $theme{background}), 
+ 
+      #spectralchars(
+      color(      
+        sprintf("%-*s", 
+                $as, 
+                $as > 0 ? ($PROGS x $ni) . (' ' x ($as - $ni)) : ''),
+        $theme{detail},
+        $theme{background}),
+
+      color(
+        ']',
+        $theme{bracket},        
+        $theme{background});
+
+  return 
+    sprintf "%-*s%s", 
+      $as, 
+      $as > 0 ? $nw : '', 
+      $pw;
 }
 
 sub summary (@)
@@ -1177,10 +1347,19 @@ sub summary (@)
   my ($wrote, $elaps) = @_;
 
   return 
-    sprintf "%d bytes written in %.6f seconds (%d bytes/sec)", 
-      $wrote, 
-      $elaps, 
-      $wrote / $elaps,
+    sprintf "%s%s%s%s%s%s%s%s%s%s%s%s", 
+      color('[ ', $theme{bracket}, $theme{background}),
+      color($wrote, $theme{detail}, $theme{background}),
+      color(" bytes", $theme{header}, $theme{background}),
+      color(" / ", $theme{bracket}, $theme{background}),
+      color(sprintf("%.6f", $elaps), $theme{detail}, $theme{background}),
+      color(" seconds", $theme{header}, $theme{background}),
+      color(" (", $theme{bracket}, $theme{background}),
+      color(int($wrote / $elaps), $theme{detail}, $theme{background}),
+      color(" B", $theme{header}, $theme{background}),
+      color("/", $theme{bracket}, $theme{background}),
+      color("s", $theme{header}, $theme{background}),
+      color(") ]", $theme{bracket}, $theme{background}),
 }
 
 sub checksum (@)
@@ -1188,10 +1367,13 @@ sub checksum (@)
   my ($cksum, $digst, $dstfn, $ckenc) = @_;
 
   return
-    sprintf "%s - %s (%s)",
-      $digst,
-      $dstfn,
-      $cksum,
+    sprintf "%s%s%s%s%s%s",
+      color($digst, $theme{detail}, $theme{background}),
+      color(" - ", $theme{bracket}, $theme{background}),
+      color($dstfn, $theme{detail}, $theme{background}),
+      color(" (", $theme{bracket}, $theme{background}),
+      color($cksum, $theme{header}, $theme{background}),
+      color(")", $theme{bracket}, $theme{background}),
 }
 
 sub get_hash_function
@@ -1218,7 +1400,7 @@ sub get_hash_function
 
     if ($e !~ /^(bin|hex|b64)$/i)
     {
-      print_message $NOTIC, "NOTICE:",
+      print_message $WARNG,
         sprintf "unrecognized encoding: %s: using %s", $e, $DEENC;
 
       $e = $DEENC;
@@ -1239,7 +1421,7 @@ sub get_hash_function
 
 END
 {
-  print color "reset", "";
+  print color "", undef, undef; # reset colors
 }
 
 
