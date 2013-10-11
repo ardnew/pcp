@@ -60,18 +60,75 @@ my ($CKSUM, $ENCOD, $HALGO) = 0 .. 2;
 
 my $DEFTW = 60; # default terminal width if we can't find one from the system
 
+my $RESET = "\e[0m"; # ANSI text reset
+
 my %COLOR =
 (
-  reset      => "\033[00m",
-  black      => "\033[90m",
-  red        => "\033[91m",
-  green      => "\033[92m",
-  yellow     => "\033[93m",
-  blue       => "\033[94m",
-  purple     => "\033[95m",
-  turquoise  => "\033[96m",
-  white      => "\033[97m",
-); 
+  RESET       => sub { $RESET.(shift).$RESET },
+  # regular
+  BLACK       => sub { "\e[0;30m".(shift).$RESET }, # black
+  RED         => sub { "\e[0;31m".(shift).$RESET }, # red
+  GREEN       => sub { "\e[0;32m".(shift).$RESET }, # green
+  YELLOW      => sub { "\e[0;33m".(shift).$RESET }, # yellow
+  BLUE        => sub { "\e[0;34m".(shift).$RESET }, # blue
+  PURPLE      => sub { "\e[0;35m".(shift).$RESET }, # purple
+  CYAN        => sub { "\e[0;36m".(shift).$RESET }, # cyan
+  WHITE       => sub { "\e[0;37m".(shift).$RESET }, # white
+  # bold
+  BBLACK      => sub { "\e[1;30m".(shift).$RESET }, # black
+  BRED        => sub { "\e[1;31m".(shift).$RESET }, # red
+  BGREEN      => sub { "\e[1;32m".(shift).$RESET }, # green
+  BYELLOW     => sub { "\e[1;33m".(shift).$RESET }, # yellow
+  BBLUE       => sub { "\e[1;34m".(shift).$RESET }, # blue
+  BPURPLE     => sub { "\e[1;35m".(shift).$RESET }, # purple
+  BCYAN       => sub { "\e[1;36m".(shift).$RESET }, # cyan
+  BWHITE      => sub { "\e[1;37m".(shift).$RESET }, # white
+  # underline
+  UBLACK      => sub { "\e[4;30m".(shift).$RESET }, # black
+  URED        => sub { "\e[4;31m".(shift).$RESET }, # red
+  UGREEN      => sub { "\e[4;32m".(shift).$RESET }, # green
+  UYELLOW     => sub { "\e[4;33m".(shift).$RESET }, # yellow
+  UBLUE       => sub { "\e[4;34m".(shift).$RESET }, # blue
+  UPURPLE     => sub { "\e[4;35m".(shift).$RESET }, # purple
+  UCYAN       => sub { "\e[4;36m".(shift).$RESET }, # cyan
+  UWHITE      => sub { "\e[4;37m".(shift).$RESET }, # white
+  # background
+  ON_BLACK    => sub { "\e[40m".(shift).$RESET }, # black
+  ON_RED      => sub { "\e[41m".(shift).$RESET }, # red
+  ON_GREEN    => sub { "\e[42m".(shift).$RESET }, # green
+  ON_YELLOW   => sub { "\e[43m".(shift).$RESET }, # yellow
+  ON_BLUE     => sub { "\e[44m".(shift).$RESET }, # blue
+  ON_PURPLE   => sub { "\e[45m".(shift).$RESET }, # purple
+  ON_CYAN     => sub { "\e[46m".(shift).$RESET }, # cyan
+  ON_WHITE    => sub { "\e[47m".(shift).$RESET }, # white
+  # high-intensity
+  IBLACK      => sub { "\e[0;90m".(shift).$RESET }, # black
+  IRED        => sub { "\e[0;91m".(shift).$RESET }, # red
+  IGREEN      => sub { "\e[0;92m".(shift).$RESET }, # green
+  IYELLOW     => sub { "\e[0;93m".(shift).$RESET }, # yellow
+  IBLUE       => sub { "\e[0;94m".(shift).$RESET }, # blue
+  IPURPLE     => sub { "\e[0;95m".(shift).$RESET }, # purple
+  ICYAN       => sub { "\e[0;96m".(shift).$RESET }, # cyan
+  IWHITE      => sub { "\e[0;97m".(shift).$RESET }, # white
+  # bold high-intensity
+  BIBLACK     => sub { "\e[1;90m".(shift).$RESET }, # black
+  BIRED       => sub { "\e[1;91m".(shift).$RESET }, # red
+  BIGREEN     => sub { "\e[1;92m".(shift).$RESET }, # green
+  BIYELLOW    => sub { "\e[1;93m".(shift).$RESET }, # yellow
+  BIBLUE      => sub { "\e[1;94m".(shift).$RESET }, # blue
+  BIPURPLE    => sub { "\e[1;95m".(shift).$RESET }, # purple
+  BICYAN      => sub { "\e[1;96m".(shift).$RESET }, # cyan
+  BIWHITE     => sub { "\e[1;97m".(shift).$RESET }, # white
+  # high-intensity background
+  ON_IBLACK   => sub { "\e[0;100m".(shift).$RESET }, # black
+  ON_IRED     => sub { "\e[0;101m".(shift).$RESET }, # red
+  ON_IGREEN   => sub { "\e[0;102m".(shift).$RESET }, # green
+  ON_IYELLOW  => sub { "\e[0;103m".(shift).$RESET }, # yellow
+  ON_IBLUE    => sub { "\e[0;104m".(shift).$RESET }, # blue
+  ON_IPURPLE  => sub { "\e[10;95m".(shift).$RESET }, # purple
+  ON_ICYAN    => sub { "\e[0;106m".(shift).$RESET }, # cyan
+  ON_IWHITE   => sub { "\e[0;107m".(shift).$RESET }, # white
+);
 
 my @STATT = 
 (
@@ -162,6 +219,23 @@ my %pod =
 # initializes the program by pre-loading some modules and parsing command line options
 #
 sub init;
+
+#
+# called when one of the following signals was received: SIGTERM, SIGINT, SIGQUIT, SIGHUP
+# 
+# this routine calls exit (which gives the interpreter a chance to hit the END block)
+#
+sub sigtrap;
+
+#
+# returns a colorized string enclosed between a leading user-specified ANSI escape code
+# and a trailing ANSI reset sequence. if the first argument is not recognized, the string
+# is returned with reset sequences before and after
+#
+# see %COLOR hash for recognized color constants
+#
+sub color ($$);
+sub randcolor ($); # picks a random color for each character in the input string
 
 #
 # print a list of messages based on increasing numeric importance level:
@@ -383,8 +457,33 @@ exit $ALLOK;
 
 sub init
 {
+  $SIG{TERM} = $SIG{INT} = $SIG{QUIT} = $SIG{HUP} = sub { sigtrap }; # LOL
+
   load_modules 1, \%bootstrp_module;
   parse_options \%option;
+}
+
+sub sigtrap
+{
+  select \*STDOUT; print randcolor "$/$/it's a trap$/$/";
+  exit;
+}
+
+sub color ($$)
+{
+  my ($col, $str) = @_; $col = uc $col;
+
+  return (exists $COLOR{$col} ? $COLOR{$col} : $COLOR{RESET})->($str);
+}
+
+sub randcolor ($)
+{
+  my $str = shift @_;
+
+  @_ = grep { not /on_|black|^U/i } keys %COLOR;
+  #@_ = grep { not /on_|^u/i } grep { /blue|cyan/i } keys %COLOR;
+
+  return join '', map { color $_[int(rand(@_))], $_ } split //, $str;
 }
 
 sub print_message ($@)
@@ -834,7 +933,7 @@ sub copy_file ($$$$$$)
       }
 
       print $/ 
-        if $stotal > 1 and $option{p_progr} or $option{v_debug} > 0;
+        if $stotal > 1 and $option{p_progr} or $option{v_debug} > 1;
     }
 
     close $writ;
@@ -952,8 +1051,8 @@ sub show_progress ($$$$$$$)
 {
   my $PROGS = '='; # symbol used to represent each step of the progress bar
 
-  my $PCTGW = 6; # width of the percentage string (chars)
-  my $PBARW = 4; # minimum width required for progress bar (chars)
+  my $PCTGW = 6; # width of the percentage string  e.g. "[ 42%]" (chars)
+  my $PBARW = 4; # minimum width required for progress bar e.g. "[**]" (chars)
 
   my ($bw, $bt, $es, $tw, $fh, $sr, $sl) = @_;
 
@@ -969,19 +1068,44 @@ sub show_progress ($$$$$$$)
   my $cr = $bw / $bt;      # completion ratio  
   my $pr = int($cr * 100); # percent complete
 
+  my $bracket_color = 'red';#'blue';
+  my $percentage_color = 'yellow';#'cyan';
+  my $progress_color = 'yellow';#'cyan';
+  my $background_color = '';#'on_blue';
+  my $show_background = 0;
+
   # percentage window
   my $pw = 
-    sprintf '%s[%s%*s%%%s]%s', 
-
-
-      $COLOR{yellow}, 
-      $COLOR{red},
-      $PCTGW - 3, $pr, # -3 chars for "[%]"      
-      $COLOR{yellow}, 
-      $COLOR{reset};
+    sprintf '%s%s%s', 
+      color($bracket_color, 
+        $show_background 
+        ?
+          color($background_color, '[') 
+        : 
+          '['
+      ),
+      color($percentage_color, 
+        $show_background
+        ?
+          color($background_color, 
+            sprintf "%*s", 
+              $PCTGW - 2, # -2 for brackets [] in e.g. "[ 42%]"
+              "$pr%") 
+        :
+          sprintf "%*s", 
+            $PCTGW - 2, # -2 for brackets [] in e.g. "[ 42%]"
+            "$pr%"
+      ), 
+      color($bracket_color, 
+        $show_background
+        ?
+          color($background_color, ']')
+        : 
+          ']'
+      );
 
   # determine if we have room for the progress bar
-  my $as = $tw - 6; # remaining char space for progress bar
+  my $as = $tw - $PCTGW; # remaining char space for progress bar
 
   $as = $as < $PBARW ? 
               0 : # hide the progress bar if we don't have the minimum chars required
@@ -991,13 +1115,33 @@ sub show_progress ($$$$$$$)
 
   # progress window
   my $nw =
-    sprintf "%s[%s%-*s%s]%s", 
-      $COLOR{yellow}, 
-      $COLOR{black},
-      $as, 
-      $as > 0 ? $PROGS x $ni : '', 
-      $COLOR{yellow}, 
-      $COLOR{reset};
+    sprintf '%s%s%s', 
+      color($bracket_color, 
+        $show_background
+        ?
+          color($background_color, '[')
+        :
+          '['
+      ), 
+      randcolor(#$progress_color, 
+        $show_background
+        ?
+          color($background_color, 
+            sprintf "%-*s", 
+              $as, 
+              $as > 0 ? ($PROGS x $ni) . (' ' x ($as - $ni)) : '')
+        :
+          sprintf "%-*s", 
+            $as, 
+            $as > 0 ? ($PROGS x $ni) . (' ' x ($as - $ni)) : ''          
+      ), 
+      color($bracket_color, 
+        $show_background
+        ?
+          color($background_color, ']')
+        :
+          ']'
+      );
 
 
   printf $fh "\r%-*s%s", $as, $nw, $pw;
@@ -1048,7 +1192,6 @@ sub checksum (@)
       $digst,
       $dstfn,
       $cksum,
-      #$ENCOD{$ckenc},
 }
 
 sub get_hash_function
@@ -1088,6 +1231,15 @@ sub get_hash_function
     print_message $ERROR,
       "unrecognized hash function: $option{c_cksum} (try --manpage)";
   }
+}
+
+
+####[ INTERPRETER BLOCKS ]################################################################
+
+
+END
+{
+  print color "reset", "";
 }
 
 
