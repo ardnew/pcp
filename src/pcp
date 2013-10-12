@@ -65,154 +65,152 @@ my $PBARW = 4; # minimum width required for progress bar e.g. "[**]" (chars)
 
 my $DEFTW = 60; # default terminal width if we can't find one from the system
 
+my $DEFTH = 'lowtide';
+my $LSCOL = 'list'; # the -o option value used to show available themes
+
 my $RESET = "\e[0m"; # ANSI text reset
 
 my %COLOR =
 (
   RESET       => sub { $RESET.(shift).$RESET },
   # regular
-  BLACK       => sub { "\e[0;30m".(shift).$RESET }, # black
-  RED         => sub { "\e[0;31m".(shift).$RESET }, # red
-  GREEN       => sub { "\e[0;32m".(shift).$RESET }, # green
-  YELLOW      => sub { "\e[0;33m".(shift).$RESET }, # yellow
-  BLUE        => sub { "\e[0;34m".(shift).$RESET }, # blue
-  PURPLE      => sub { "\e[0;35m".(shift).$RESET }, # purple
-  CYAN        => sub { "\e[0;36m".(shift).$RESET }, # cyan
-  WHITE       => sub { "\e[0;37m".(shift).$RESET }, # white
+  BLACK       => sub { "\e[0;30m".(shift) }, # black
+  RED         => sub { "\e[0;31m".(shift) }, # red
+  GREEN       => sub { "\e[0;32m".(shift) }, # green
+  YELLOW      => sub { "\e[0;33m".(shift) }, # yellow
+  BLUE        => sub { "\e[0;34m".(shift) }, # blue
+  PURPLE      => sub { "\e[0;35m".(shift) }, # purple
+  CYAN        => sub { "\e[0;36m".(shift) }, # cyan
+  WHITE       => sub { "\e[0;37m".(shift) }, # white
   # bold
-  BBLACK      => sub { "\e[1;30m".(shift).$RESET }, # black
-  BRED        => sub { "\e[1;31m".(shift).$RESET }, # red
-  BGREEN      => sub { "\e[1;32m".(shift).$RESET }, # green
-  BYELLOW     => sub { "\e[1;33m".(shift).$RESET }, # yellow
-  BBLUE       => sub { "\e[1;34m".(shift).$RESET }, # blue
-  BPURPLE     => sub { "\e[1;35m".(shift).$RESET }, # purple
-  BCYAN       => sub { "\e[1;36m".(shift).$RESET }, # cyan
-  BWHITE      => sub { "\e[1;37m".(shift).$RESET }, # white
+  BBLACK      => sub { "\e[1;30m".(shift) }, # black
+  BRED        => sub { "\e[1;31m".(shift) }, # red
+  BGREEN      => sub { "\e[1;32m".(shift) }, # green
+  BYELLOW     => sub { "\e[1;33m".(shift) }, # yellow
+  BBLUE       => sub { "\e[1;34m".(shift) }, # blue
+  BPURPLE     => sub { "\e[1;35m".(shift) }, # purple
+  BCYAN       => sub { "\e[1;36m".(shift) }, # cyan
+  BWHITE      => sub { "\e[1;37m".(shift) }, # white
   # underline
-  UBLACK      => sub { "\e[4;30m".(shift).$RESET }, # black
-  URED        => sub { "\e[4;31m".(shift).$RESET }, # red
-  UGREEN      => sub { "\e[4;32m".(shift).$RESET }, # green
-  UYELLOW     => sub { "\e[4;33m".(shift).$RESET }, # yellow
-  UBLUE       => sub { "\e[4;34m".(shift).$RESET }, # blue
-  UPURPLE     => sub { "\e[4;35m".(shift).$RESET }, # purple
-  UCYAN       => sub { "\e[4;36m".(shift).$RESET }, # cyan
-  UWHITE      => sub { "\e[4;37m".(shift).$RESET }, # white
+  UBLACK      => sub { "\e[4;30m".(shift) }, # black
+  URED        => sub { "\e[4;31m".(shift) }, # red
+  UGREEN      => sub { "\e[4;32m".(shift) }, # green
+  UYELLOW     => sub { "\e[4;33m".(shift) }, # yellow
+  UBLUE       => sub { "\e[4;34m".(shift) }, # blue
+  UPURPLE     => sub { "\e[4;35m".(shift) }, # purple
+  UCYAN       => sub { "\e[4;36m".(shift) }, # cyan
+  UWHITE      => sub { "\e[4;37m".(shift) }, # white
   # background
-  ON_BLACK    => sub { "\e[40m".(shift).$RESET }, # black
-  ON_RED      => sub { "\e[41m".(shift).$RESET }, # red
-  ON_GREEN    => sub { "\e[42m".(shift).$RESET }, # green
-  ON_YELLOW   => sub { "\e[43m".(shift).$RESET }, # yellow
-  ON_BLUE     => sub { "\e[44m".(shift).$RESET }, # blue
-  ON_PURPLE   => sub { "\e[45m".(shift).$RESET }, # purple
-  ON_CYAN     => sub { "\e[46m".(shift).$RESET }, # cyan
-  ON_WHITE    => sub { "\e[47m".(shift).$RESET }, # white
+  ON_BLACK    => sub { "\e[40m".(shift) }, # black
+  ON_RED      => sub { "\e[41m".(shift) }, # red
+  ON_GREEN    => sub { "\e[42m".(shift) }, # green
+  ON_YELLOW   => sub { "\e[43m".(shift) }, # yellow
+  ON_BLUE     => sub { "\e[44m".(shift) }, # blue
+  ON_PURPLE   => sub { "\e[45m".(shift) }, # purple
+  ON_CYAN     => sub { "\e[46m".(shift) }, # cyan
+  ON_WHITE    => sub { "\e[47m".(shift) }, # white
   # high-intensity
-  IBLACK      => sub { "\e[0;90m".(shift).$RESET }, # black
-  IRED        => sub { "\e[0;91m".(shift).$RESET }, # red
-  IGREEN      => sub { "\e[0;92m".(shift).$RESET }, # green
-  IYELLOW     => sub { "\e[0;93m".(shift).$RESET }, # yellow
-  IBLUE       => sub { "\e[0;94m".(shift).$RESET }, # blue
-  IPURPLE     => sub { "\e[0;95m".(shift).$RESET }, # purple
-  ICYAN       => sub { "\e[0;96m".(shift).$RESET }, # cyan
-  IWHITE      => sub { "\e[0;97m".(shift).$RESET }, # white
+  IBLACK      => sub { "\e[0;90m".(shift) }, # black
+  IRED        => sub { "\e[0;91m".(shift) }, # red
+  IGREEN      => sub { "\e[0;92m".(shift) }, # green
+  IYELLOW     => sub { "\e[0;93m".(shift) }, # yellow
+  IBLUE       => sub { "\e[0;94m".(shift) }, # blue
+  IPURPLE     => sub { "\e[0;95m".(shift) }, # purple
+  ICYAN       => sub { "\e[0;96m".(shift) }, # cyan
+  IWHITE      => sub { "\e[0;97m".(shift) }, # white
   # bold high-intensity
-  BIBLACK     => sub { "\e[1;90m".(shift).$RESET }, # black
-  BIRED       => sub { "\e[1;91m".(shift).$RESET }, # red
-  BIGREEN     => sub { "\e[1;92m".(shift).$RESET }, # green
-  BIYELLOW    => sub { "\e[1;93m".(shift).$RESET }, # yellow
-  BIBLUE      => sub { "\e[1;94m".(shift).$RESET }, # blue
-  BIPURPLE    => sub { "\e[1;95m".(shift).$RESET }, # purple
-  BICYAN      => sub { "\e[1;96m".(shift).$RESET }, # cyan
-  BIWHITE     => sub { "\e[1;97m".(shift).$RESET }, # white
+  BIBLACK     => sub { "\e[1;90m".(shift) }, # black
+  BIRED       => sub { "\e[1;91m".(shift) }, # red
+  BIGREEN     => sub { "\e[1;92m".(shift) }, # green
+  BIYELLOW    => sub { "\e[1;93m".(shift) }, # yellow
+  BIBLUE      => sub { "\e[1;94m".(shift) }, # blue
+  BIPURPLE    => sub { "\e[1;95m".(shift) }, # purple
+  BICYAN      => sub { "\e[1;96m".(shift) }, # cyan
+  BIWHITE     => sub { "\e[1;97m".(shift) }, # white
   # high-intensity background
-  ON_IBLACK   => sub { "\e[0;100m".(shift).$RESET }, # black
-  ON_IRED     => sub { "\e[0;101m".(shift).$RESET }, # red
-  ON_IGREEN   => sub { "\e[0;102m".(shift).$RESET }, # green
-  ON_IYELLOW  => sub { "\e[0;103m".(shift).$RESET }, # yellow
-  ON_IBLUE    => sub { "\e[0;104m".(shift).$RESET }, # blue
-  ON_IPURPLE  => sub { "\e[10;95m".(shift).$RESET }, # purple
-  ON_ICYAN    => sub { "\e[0;106m".(shift).$RESET }, # cyan
-  ON_IWHITE   => sub { "\e[0;107m".(shift).$RESET }, # white
+  ON_IBLACK   => sub { "\e[0;100m".(shift) }, # black
+  ON_IRED     => sub { "\e[0;101m".(shift) }, # red
+  ON_IGREEN   => sub { "\e[0;102m".(shift) }, # green
+  ON_IYELLOW  => sub { "\e[0;103m".(shift) }, # yellow
+  ON_IBLUE    => sub { "\e[0;104m".(shift) }, # blue
+  ON_IPURPLE  => sub { "\e[10;95m".(shift) }, # purple
+  ON_ICYAN    => sub { "\e[0;106m".(shift) }, # cyan
+  ON_IWHITE   => sub { "\e[0;107m".(shift) }, # white
 );
 
 my %THEME = 
 (
-  DEFAULT =>
+  hightide => 
   {
-    header      => "ICYAN",
-    detail      => "WHITE",
-    bracket     => "CYAN",
-    background  => undef,
+    header => { fg => "WHITE", bg => undef },
+    detail => { fg => "CYAN",  bg => undef },
+    symbol => { fg => "ICYAN", bg => undef },
+  }, 
+  lowtide =>
+  {
+    header => { fg => "ICYAN", bg => undef },
+    detail => { fg => "WHITE", bg => undef },
+    symbol => { fg => "CYAN",  bg => undef },
   },
-  FLASHGORDON =>
+  flashgordon =>
   {
-    header      => "IYELLOW",
-    detail      => "RED",
-    bracket     => "YELLOW",
-    background  => undef,
+    header => { fg => "IYELLOW", bg => undef },
+    detail => { fg => "RED",     bg => undef },
+    symbol => { fg => "YELLOW",  bg => undef },
   },
-  GASHFLORDON =>
+  gashflordon =>
   {
-    header      => "BIRED",
-    detail      => "YELLOW",
-    bracket     => "RED",
-    background  => undef,
+    header => { fg => "IRED",  bg => undef },
+    detail => { fg => "IYELLOW", bg => undef },
+    symbol => { fg => "RED",    bg => undef },
   },    
-  BLACK => 
+  black => 
   {
-    header      => "IBLACK",
-    detail      => "BLACK",
-    bracket     => "IBLACK",
-    background  => undef,
+    header => { fg => "IBLACK", bg => undef },
+    detail => { fg => "BLACK",  bg => undef },
+    symbol => { fg => "IBLACK", bg => undef },
   },
-  RED => 
+  red => 
   {
-    header      => "IRED",
-    detail      => "RED",
-    bracket     => "IRED",
-    background  => undef,
+    header => { fg => "IRED", bg => undef },
+    detail => { fg => "RED",  bg => undef },
+    symbol => { fg => "IRED", bg => undef },
   },
-  GREEN => 
+  green => 
   {
-    header      => "IGREEN",
-    detail      => "GREEN",
-    bracket     => "IGREEN",
-    background  => undef,
+    header => { fg => "IGREEN", bg => undef },
+    detail => { fg => "GREEN",  bg => undef },
+    symbol => { fg => "IGREEN", bg => undef },
   },
-  YELLOW => 
+  yellow => 
   {
-    header      => "IYELLOW",
-    detail      => "YELLOW",
-    bracket     => "IYELLOW",
-    background  => undef,
+    header => { fg => "IYELLOW", bg => undef },
+    detail => { fg => "YELLOW",  bg => undef },
+    symbol => { fg => "IYELLOW", bg => undef },
   },
-  BLUE => 
+  blue => 
   {
-    header      => "IBLUE",
-    detail      => "BLUE",
-    bracket     => "IBLUE",
-    background  => undef,
+    header => { fg => "IBLUE", bg => undef },
+    detail => { fg => "BLUE",  bg => undef },
+    symbol => { fg => "IBLUE", bg => undef },
   },
-  PURPLE => 
+  purple => 
   {
-    header      => "IPURPLE",
-    detail      => "PURPLE",
-    bracket     => "IPURPLE",
-    background  => undef,
+    header => { fg => "IPURPLE", bg => undef },
+    detail => { fg => "PURPLE",  bg => undef },
+    symbol => { fg => "IPURPLE", bg => undef },
   },
-  CYAN => 
+  cyan => 
   {
-    header      => "ICYAN",
-    detail      => "CYAN",
-    bracket     => "ICYAN",
-    background  => undef,
+    header => { fg => "ICYAN", bg => undef },
+    detail => { fg => "CYAN",  bg => undef },
+    symbol => { fg => "ICYAN", bg => undef },
   },
-  WHITE => 
+  white => 
   {
-    header      => "IWHITE",
-    detail      => "WHITE",
-    bracket     => "IWHITE",
-    background  => undef,
+    header => { fg => "IWHITE", bg => undef },
+    detail => { fg => "WHITE",  bg => undef },
+    symbol => { fg => "IWHITE", bg => undef },
   },
 );
 
@@ -267,7 +265,7 @@ my %required_module =
 my %optional_module =
 (
   'POSIX'           => [ qw[] ],
-  'Term::ReadsKey'   => [ qw[] ],
+  'Term::ReadKey'   => [ qw[] ],
   'Benchmark'       => [ qw[ cmpthese ] ],
   'Digest::MD5'     => [ qw[] ],
   'Digest::SHA'     => [ qw[] ],
@@ -282,6 +280,7 @@ my %option =
   h_usage => [ qw[    usage|help|what|wat|u|h|?             0 ] ],
   i_inter => [ qw[                interactive|i             0 ] ], 
   m_manpg => [ qw[                manpage|man|m             0 ] ],
+  o_color => [ qw[               colors|theme|o=s           0 ] ],
   p_progr => [ qw[                   progress|p!            1 ] ],
   q_quiet => [ qw[                      quiet|q             0 ] ],
   r_cycle => [ qw[                        crc|r=i           0 ] ],
@@ -297,7 +296,7 @@ my %pod =
   manpage  => 2,
 );
 
-my %theme = ();
+my %theme = %{$THEME{$DEFTH}};
 
 
 ####[ forward declarations ]##############################################################
@@ -316,16 +315,28 @@ sub init;
 sub sigtrap;
 
 #
-# returns an ANSI colorized string with a trailing reset sequence 
-#
-#   see: %COLOR hash for recognized color constants
+# returns an ANSI colorized string
 #
 # arg1: string to color
-# arg2: foreground color name (undef for none)
-# arg3: background color name (undef for none)
+# arg2: foreground/background color hash (see: %theme hash)
 #
-sub color ($$$);
-sub spectralchars ($); # picks a random color for each character in the input string
+sub colormebadd ($$);
+
+#
+# returns sub colormebadd ($$$) with a trailing ANSI reset sequence
+#
+sub color ($$);
+
+#
+# splits the input string into characters and calls sub colormebadd ($$$) with a random
+# color for every character. an ANSI reset sequence is added to the tail
+#
+sub spectralchars ($);
+
+#
+# prints a list of available themes defined in %THEME and exits the program
+#
+sub show_themes;
 
 #
 # accepts a theme name as parameter and configures the global %theme hash accordingly
@@ -387,6 +398,11 @@ sub show_modules ($$$);
 #     ${$option{v_debug}}[1]
 #
 sub parse_options ($);
+
+#
+# print the contents of the global %option hash
+# 
+sub show_options;
 
 #
 # performs some pre-processing for optional modules after options have been parsed
@@ -554,28 +570,49 @@ sub init
 {
   $SIG{TERM} = $SIG{INT} = $SIG{QUIT} = $SIG{HUP} = sub { sigtrap }; # LOL
 
-  set_theme "default";
-  #set_theme "flashgordon";
-  #set_theme "gashflordon";
-
   load_modules 1, \%bootstrp_module;
-  parse_options \%option;   
+  parse_options \%option;  
+
+  if ($option{o_color}) 
+  {
+    show_themes if $option{o_color} =~ /$LSCOL/i;
+    set_theme $option{o_color};
+  }
+
+  if ($option{v_debug} > 1)
+  {
+    printf "$/%s$/$/", 
+      color($PVSTR, $theme{header});
+    show_options;
+  }  
 }
 
 sub sigtrap
 {
   select \*STDOUT; print spectralchars "$/$/it's a trap$/$/";
-  exit;
+  exit $ONOES;
 }
 
-sub color ($$$)
+sub colormebadd ($$)
 {
-  my ($str, $fgc, $bgc) = @_; 
+  my ($str, $clr) = @_;
 
-  $bgc = $COLOR{uc ($bgc || $fgc || "RESET")};
-  $fgc = $COLOR{uc ($fgc || "RESET")};
+  my ($fgc, $bgc) = map 
+  { 
+    (defined) ? (uc) : "" 
+  } 
+  ${$clr}{fg}, ${$clr}{bg};
+
+  $bgc = $COLOR{$bgc || $fgc || "RESET"};
+  $fgc = $COLOR{$fgc || "RESET"};
 
   return $fgc->($bgc->($str));
+}
+
+sub color ($$)
+{
+  my ($str, $clr) = @_;
+  return $COLOR{RESET}->(colormebadd ($str, $clr));
 }
 
 sub spectralchars ($)
@@ -588,12 +625,27 @@ sub spectralchars ($)
   # do not use black colors because consoles typically have black colored backgrounds
   @_ = grep { not /black/i } @_;
 
-  return join '', map { color $_, $_[int(rand(@_))], undef } split //, $str;
+  return join '', map 
+    { 
+      colormebadd $_, 
+      { 
+        fg => $_[int(rand(@_))], 
+        bg => undef 
+      }
+    } split //, $str;
+}
+
+sub show_themes
+{
+  printf "%s$/", color "available themes:", $theme{header};
+  printf "  %s$/", color lc $_, $theme{detail} for sort keys %THEME;
+  print $/;
+  exit $ALLOK;
 }
 
 sub set_theme ($)
 {
-  my $name = uc shift; chomp $name;
+  my $name = lc shift; chomp $name;
 
   if (exists $THEME{$name})
   {
@@ -603,11 +655,10 @@ sub set_theme ($)
   {
     %theme =
     ( 
-      # sub color ($$$) handles these undefs gracefully
-      header      => undef, 
-      detail      => undef,
-      bracket     => undef,
-      background  => undef,
+      # sub colormebadd ($$$) handles these undefs gracefully
+      header => { fg => undef, bg => undef },
+      detail => { fg => undef, bg => undef },
+      symbol => { fg => undef, bg => undef },  
     );
   }
 }
@@ -620,35 +671,35 @@ sub print_message ($@)
   {
     my $pro = shift @msg;
     printf STDOUT "%s$/  %s$/$/", 
-      color($pro, $theme{header}, $theme{background}), 
-      join "$/  ", map { color $_, $theme{detail}, $theme{background} } @msg; 
+      color($pro, $theme{header}), 
+      join "$/  ", map { color $_, $theme{detail} } @msg; 
   }
   elsif ($ret == $NOTIC)
   {
     my $pro = shift @msg;
     printf STDOUT "%s$/  %s$/$/", 
-      color($pro, $theme{header}, $theme{background}),
-      join "$/  ", map { color $_, $theme{detail}, $theme{background} } @msg
+      color($pro, $theme{header}),
+      join "$/  ", map { color $_, $theme{detail} } @msg
         if $option{v_debug} > 1;
   }
   elsif ($ret == $WARNG)
   {
     printf STDERR "%s$/  %s$/$/", 
-      color("warning:", $theme{header}, $theme{background}), 
-      join "$/  ", map { color $_, $theme{detail}, $theme{background} } @msg;
+      color("warning:", $theme{header}), 
+      join "$/  ", map { color $_, $theme{detail} } @msg;
   }
   elsif ($ret == $ERROR)
   {
     printf STDERR "%s$/  %s$/$/", 
-      color("error:", $theme{header}, $theme{background}),     
-      join "$/  ", map { color $_, $theme{detail}, $theme{background} } @msg;
+      color("error:", $theme{header}),     
+      join "$/  ", map { color $_, $theme{detail} } @msg;
     exit $ONOES;
   }
   else
   {
     printf STDERR "[%s]$/  %s$/$/", 
-      color("$0:", $theme{header}, $theme{background}),     
-      join "$/  ", map { color $_, $theme{detail}, $theme{background} } @msg;
+      color("$0:", $theme{header}),     
+      join "$/  ", map { color $_, $theme{detail} } @msg;
   }
 }
 
@@ -688,35 +739,31 @@ sub show_modules ($$$)
   my ($req, $gid, %mod) = (shift, shift, %{(shift)});
 
   my $wid = 0;
-  (length(
-
-color($_, $theme{detail}, $theme{background})
-
-    ) > $wid) && ($wid = length(
-
-color($_, $theme{detail}, $theme{background})
-
-    )) for keys %mod;
+  (length(color($_, $theme{detail})) > $wid) 
+    && 
+  ($wid = length(color($_, $theme{detail})))
+    for keys %mod;
 
   printf "%s$/",
     color(
       sprintf("%s %smodules:", 
         $req == $REQMO ? "required" : "optional",
         defined $gid ? $gid . " " : ""), 
-      $theme{header},
-      $theme{background});
+      $theme{header});
   
-  printf "  %${wid}s$/$/", color("none", $theme{detail}, $theme{background}) and return 
-    unless keys %mod > 0;
+  printf "  %${wid}s$/$/", 
+    color("none", $theme{detail}) and return 
+      unless keys %mod > 0;
 
   while (my ($pkg, @sym) = map { (ref) ? @{$_} : $_ } each %mod)
   {
     printf "  %${wid}s%s%s%s%s$/", 
-      color($pkg, $theme{detail}, $theme{background}),
-      color(' => ', $theme{bracket}, $theme{background}),
-      color('[', $theme{bracket}, $theme{background}),
-      color(@sym ? " @sym " : "", $theme{detail}, $theme{background}),
-      color(']', $theme{bracket}, $theme{background});
+      color($pkg,       $theme{detail}),
+      color(' => ',     $theme{symbol}),
+      color('[',        $theme{symbol}),
+      color(@sym ? 
+        " @sym " : "",  $theme{detail}),
+      color(']',        $theme{symbol});
   }
   print $/;
 }
@@ -743,31 +790,32 @@ sub parse_options ($)
     or print_message $ERROR, 'wat? see --usage for more information';
   }
 
-  $$opt{$_} = ${$$opt{$_}}[1] for keys %{$opt};
+  $$opt{$_} = ${$$opt{$_}}[1] 
+    for keys %{$opt};
+}
 
-  if ($$opt{v_debug} > 1)
+sub show_options
+{
+  if ($option{v_debug} > 1)
   {
-    printf "$/%s$/$/", 
-      color($PVSTR, $theme{header}, $theme{background});
-
     printf "%s$/", 
-      color("command-line options:", $theme{header}, $theme{background});
+      color("command-line options:", $theme{header});
 
-    while (my ($k, $v) = each %{$opt}) 
+    while (my ($k, $v) = each %option) 
     { 
       printf "  %s%s%-s$/", 
-        color($k,    $theme{detail}, $theme{background}), 
-        color(' = ', $theme{bracket}, $theme{background}),
-        color($v,    $theme{detail}, $theme{background}); 
+        color($k,    $theme{detail}), 
+        color(' = ', $theme{symbol}),
+        color($v,    $theme{detail}); 
     }
     printf "     %s%s%s%-s%s$/$/", 
-      color('args', $theme{detail}, $theme{background}), 
-      color(' = ', $theme{bracket}, $theme{background}),
-      color('(', $theme{bracket}, $theme{background}),
-      join(
-        color(', ', $theme{bracket}, $theme{background}), 
-        map { color $_, $theme{detail}, $theme{background} } @ARGV),
-      color(')', $theme{bracket}, $theme{background});
+      color('args',      $theme{detail}), 
+      color(' = ',       $theme{symbol}),
+      color('(',         $theme{symbol}),
+      join(color(', ',   $theme{symbol}), 
+        map { color $_,  
+          $theme{detail} } @ARGV),
+      color(')',         $theme{symbol});
   }  
 }
 
@@ -921,9 +969,9 @@ sub identify_paths (@)
     sub tag ($)
     {
       sprintf '%s%s%s',
-        color('(',     $theme{bracket}, $theme{background}),
-        color((shift), $theme{header},  $theme{background}),
-        color(')',     $theme{bracket}, $theme{background})
+        color('(',     $theme{symbol}),
+        color((shift), $theme{header}),
+        color(')',     $theme{symbol})
     }
     sub nprefix ($$) { $_[0] ? tag("DIR")." " : $_[1] }
     sub nsuffix ($$) { $_[0] ? " ".tag("NEW") : $_[1] }
@@ -931,31 +979,32 @@ sub identify_paths (@)
     # shows precisely the source and target file paths for every source file
     if ($option{v_debug} > 2)
     {
-      printf "%s$/", color('copy operations:', $theme{header}, $theme{background});
+      printf "%s$/", 
+        color('copy operations:', $theme{header});
 
       printf "  %s%-s$/%*s%s%s%s$/$/", 
-        nprefix((-d $_), $wsppad), 
-        color($_, $theme{detail}, $theme{background}), 
+        nprefix((-d $_),    $wsppad), 
+        color($_,           $theme{detail}), 
         4, " ", 
         $wsppad, 
-        color('-=> ', $theme{bracket}, $theme{background}),
-        color($cppath{$_}, $theme{detail}, $theme{background})
+        color('-=> ',       $theme{symbol}),
+        color($cppath{$_},  $theme{detail})
           for sort keys %cppath;
     }
     # shows a list of source files and the target file/directory
     else
     {
       printf "%s$/  %s$/$/", 
-        color('source files:', $theme{header}, $theme{background}),
+        color('source files:', $theme{header}),
         join("$/  ", map { 
-          nprefix((-d $_), $wsppad) . color($_, $theme{detail}, $theme{background}) } 
+          nprefix((-d $_), $wsppad) . color($_, $theme{detail}) } 
             sort keys %cppath);
         
       printf "%s$/  %s%s%s$/$/", 
-        color('target file:', $theme{header}, $theme{background}),
-        nprefix($fdtype, $wsppad), 
-        color($target, $theme{detail}, $theme{background}),
-        nsuffix(not (-e $target), $wsppad);
+        color('target file:',      $theme{header}),
+        nprefix($fdtype,           $wsppad), 
+        color($target,             $theme{detail}),
+        nsuffix(not (-e $target),  $wsppad);
     }
   }
 
@@ -1036,19 +1085,19 @@ sub copy_file ($$$$$$)
       if ($option{v_debug})
       {
         $iters = sprintf "%s %d %s %d", 
-          color('test', $theme{header}, $theme{background}), 
-          color($tcount + 1, $theme{detail}, $theme{background}), 
-          color('/', $theme{bracket}, $theme{background}), 
-          color($option{t_bench}, $theme{detail}, $theme{background}); 
+          color('test',            $theme{header}), 
+          color($tcount + 1,       $theme{detail}), 
+          color('/',               $theme{symbol}), 
+          color($option{t_bench},  $theme{detail}); 
       }
       elsif ($tcount == 0)
       {
         $iters = sprintf "%d %s%s%s%s", 
-          color($option{t_bench}, $theme{detail}, $theme{background}), 
-          color('test', $theme{header}, $theme{background}), 
-          color('(', $theme{bracket}, $theme{background}), 
-          color('s', $theme{header}, $theme{background}), 
-          color(')', $theme{bracket}, $theme{background}); 
+          color($option{t_bench},  $theme{detail}), 
+          color('test',            $theme{header}), 
+          color('(',               $theme{symbol}), 
+          color('s',               $theme{header}), 
+          color(')',               $theme{symbol}); 
       }
 
       printf "%s$/", header("test", 
@@ -1264,18 +1313,17 @@ sub header (@)
 
   return 
     sprintf "%s%s%s%s%s%s%s%s%s%s%s",
-      color('[', $theme{bracket}, $theme{background}),
-      color(" $title ", $theme{header}, $theme{background}),
-      color($count, $theme{header}, $theme{background}),
-      color(' / ', $theme{bracket}, $theme{background}),
-      color($total, $theme{header}, $theme{background}),
-      color(' ] ', $theme{bracket}, $theme{background}),
-      color($srcfn, $theme{detail}, $theme{background}),
-      color(' (', $theme{bracket}, $theme{background}),
-      color($rsize, $theme{detail}, $theme{background}),
-      color(' bytes', $theme{header}, $theme{background}),
-      color(')', $theme{bracket}, $theme{background}),
-      #defined $iters ? "[ $iters ]" : "",
+      color('[',          $theme{symbol}),
+      color(" $title ",   $theme{header}),
+      color($count,       $theme{header}),
+      color(' / ',        $theme{symbol}),
+      color($total,       $theme{header}),
+      color(' ] ',        $theme{symbol}),
+      color($srcfn,       $theme{detail}),
+      color(' (',         $theme{symbol}),
+      color($rsize,       $theme{detail}),
+      color(' bytes',     $theme{header}),
+      color(')',          $theme{symbol}),
 }
 
 sub status (@)
@@ -1285,23 +1333,13 @@ sub status (@)
 # percentage window
   my $pw = 
     sprintf '%s%s%s', 
-
-      color(
-        '[', 
-        $theme{bracket},
-        $theme{background}), 
-
+      color('[', $theme{symbol}), 
       color(
         sprintf("%*s", 
-                $PCTGW - 2, # -2 for brackets [] in e.g. "[ 42%]"
+                $PCTGW - 2, # -2 for symbols [] in e.g. "[ 42%]"
                 "$pr%"), 
-        $theme{header},
-        $theme{background}), 
-
-      color(
-        ']',
-        $theme{bracket},        
-        $theme{background});
+        $theme{header}), 
+      color(']', $theme{symbol});
 
 
   # determine if we have room for the progress bar
@@ -1317,23 +1355,13 @@ sub status (@)
   my $nw = 
     sprintf '%s%s%s', 
 
-      color(
-        '[',
-        $theme{bracket},
-        $theme{background}), 
- 
-      #spectralchars(
+      color('[', $theme{symbol}), 
       color(      
         sprintf("%-*s", 
                 $as, 
                 $as > 0 ? ($PROGS x $ni) . (' ' x ($as - $ni)) : ''),
-        $theme{detail},
-        $theme{background}),
-
-      color(
-        ']',
-        $theme{bracket},        
-        $theme{background});
+        $theme{detail}),
+      color(']', $theme{symbol});
 
   return 
     sprintf "%-*s%s", 
@@ -1348,18 +1376,18 @@ sub summary (@)
 
   return 
     sprintf "%s%s%s%s%s%s%s%s%s%s%s%s", 
-      color('[ ', $theme{bracket}, $theme{background}),
-      color($wrote, $theme{detail}, $theme{background}),
-      color(" bytes", $theme{header}, $theme{background}),
-      color(" / ", $theme{bracket}, $theme{background}),
-      color(sprintf("%.6f", $elaps), $theme{detail}, $theme{background}),
-      color(" seconds", $theme{header}, $theme{background}),
-      color(" (", $theme{bracket}, $theme{background}),
-      color(int($wrote / $elaps), $theme{detail}, $theme{background}),
-      color(" B", $theme{header}, $theme{background}),
-      color("/", $theme{bracket}, $theme{background}),
-      color("s", $theme{header}, $theme{background}),
-      color(") ]", $theme{bracket}, $theme{background}),
+      color('[ ',                     $theme{symbol}),
+      color($wrote,                   $theme{detail}),
+      color(" bytes",                 $theme{header}),
+      color(" / ",                    $theme{symbol}),
+      color(sprintf("%.6f", $elaps),  $theme{detail}),
+      color(" seconds",               $theme{header}),
+      color(" (",                     $theme{symbol}),
+      color(int($wrote / $elaps),     $theme{detail}),
+      color(" B",                     $theme{header}),
+      color("/",                      $theme{symbol}),
+      color("s",                      $theme{header}),
+      color(") ]",                    $theme{symbol}),
 }
 
 sub checksum (@)
@@ -1368,12 +1396,12 @@ sub checksum (@)
 
   return
     sprintf "%s%s%s%s%s%s",
-      color($digst, $theme{detail}, $theme{background}),
-      color(" - ", $theme{bracket}, $theme{background}),
-      color($dstfn, $theme{detail}, $theme{background}),
-      color(" (", $theme{bracket}, $theme{background}),
-      color($cksum, $theme{header}, $theme{background}),
-      color(")", $theme{bracket}, $theme{background}),
+      color($digst,  $theme{detail}),
+      color(" - ",   $theme{symbol}),
+      color($dstfn,  $theme{detail}),
+      color(" (",    $theme{symbol}),
+      color($cksum,  $theme{header}),
+      color(")",     $theme{symbol}),
 }
 
 sub get_hash_function
@@ -1421,7 +1449,7 @@ sub get_hash_function
 
 END
 {
-  print color "", undef, undef; # reset colors
+  print color "", undef; # reset colors
 }
 
 
@@ -1440,9 +1468,9 @@ __END__
 
 =head1 SYNOPSIS
 
-B<pcp> [ options ] [ B<-?bcdfhimpqrsuvw> ] F<source-file> F<target-file>
+B<pcp> [ options ] [ B<-?bcdfhimopqrsuvw> ] F<source-file> F<target-file>
 
-B<pcp> [ options ] [ B<-?bcdfhimpqrsuvw> ] F<source-file> F<...> F<target-directory>
+B<pcp> [ options ] [ B<-?bcdfhimopqrsuvw> ] F<source-file> F<...> F<target-directory>
 
 =head1 DESCRIPTION
 
@@ -1496,6 +1524,10 @@ Print synopsis and options to STDOUT and exit.
 =item B<--manpage>, B<-m>
 
 Display the manual page and exit.
+
+=item B<--colors=>F<name>, B<--theme=>F<name>, B<-o> F<name>
+
+Set the program colors theme to F<name>. If F<name> is B<list>, then print a list of available themes and exit.
 
 =item B<--progress>, B<-p>
 
