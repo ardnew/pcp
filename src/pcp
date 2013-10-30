@@ -1310,7 +1310,7 @@ sub show_progress ($$$$$$$)
   my $cr = $bw / $bt;      # completion ratio  
   my $pr = int($cr * 100); # percent complete
 
-  printf $fh "\r%s\r", status($tw, $cr, $pr);
+  printf $fh "\r%s", status($tw, $cr, $pr);
 
   # STDOUT gets closed after flush, so we need to reopen it for our caller
   select \*STDOUT if defined $termsz;
