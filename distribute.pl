@@ -24,9 +24,9 @@ mkpath($resultdir);
 
 my @distfiles = map { File::Spec->catfile($scriptdir, @$_) }
 (
-  [qw| LICENSE      |],
-  [qw| README.md    |],
-  [qw| src pcp      |],
+  [qw| LICENSE      |], # one array reference for each source file:
+  [qw| README.md    |], #   the last element in the array reference is the file name,
+  [qw| src pcp      |], #   and all preceding elements are directories to that file.
 );
 
 foreach my $fn (@distfiles)

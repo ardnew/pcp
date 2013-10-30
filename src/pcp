@@ -65,8 +65,8 @@ my $PBARW = 4; # minimum width required for progress bar e.g. "[**]" (chars)
 
 my $DEFTW = 60; # default terminal width if we can't find one from the system
 
-my $DEFTH = 'lowtide';
 my $LSCOL = 'list'; # the -o option value used to show available themes
+my $DEFTH = 'lowtide'; # default theme name
 
 my $RESET = "\e[0m"; # ANSI text reset
 
@@ -160,9 +160,9 @@ my %THEME =
   },
   gashflordon =>
   {
-    header => { fg => "IRED",  bg => undef },
+    header => { fg => "IRED",    bg => undef },
     detail => { fg => "IYELLOW", bg => undef },
-    symbol => { fg => "RED",    bg => undef },
+    symbol => { fg => "RED",     bg => undef },
   },    
   black => 
   {
@@ -323,12 +323,12 @@ sub sigtrap;
 sub colormebadd ($$);
 
 #
-# returns sub colormebadd ($$$) with a trailing ANSI reset sequence
+# returns sub colormebadd ($$) with a trailing ANSI reset sequence
 #
 sub color ($$);
 
 #
-# splits the input string into characters and calls sub colormebadd ($$$) with a random
+# splits the input string into characters and calls sub colormebadd ($$) with a random
 # color for every character. an ANSI reset sequence is added to the tail
 #
 sub spectralchars ($);
@@ -597,6 +597,8 @@ sub colormebadd ($$)
 {
   my ($str, $clr) = @_;
 
+  return $str unless 0 < scalar keys %theme;
+
   my ($fgc, $bgc) = map 
   { 
     (defined) ? (uc) : "" 
@@ -612,12 +614,18 @@ sub colormebadd ($$)
 sub color ($$)
 {
   my ($str, $clr) = @_;
-  return $COLOR{RESET}->(colormebadd ($str, $clr));
+
+  return $str unless 0 < scalar keys %theme;
+
+  return $COLOR{RESET}->(colormebadd $str, $clr);
 }
 
 sub spectralchars ($)
 {
   my $str = shift @_;
+
+  # if %theme is empty, we don't have ANSI color support
+  return $str unless 0 < scalar keys %theme;
 
   # do not use the background colors or the underlined styles 
   @_ = grep { not /on_|^U/i } keys %COLOR;
@@ -653,13 +661,7 @@ sub set_theme ($)
   }
   else
   {
-    %theme =
-    ( 
-      # sub colormebadd ($$$) handles these undefs gracefully
-      header => { fg => undef, bg => undef },
-      detail => { fg => undef, bg => undef },
-      symbol => { fg => undef, bg => undef },  
-    );
+    %theme = ();
   }
 }
 
@@ -1138,10 +1140,17 @@ sub copy_file ($$$$$$)
         }
         else
         {
-          if ($option{v_debug} > 2)
+          if ($option{v_debug} > 1)
           {
-            printf "%*s[ %*d / %*d ] ( %6.2f%% )$/", 
-              6, "", $width, $wsize, $width, $rsize, $wsize / $rsize * 100.0;
+            printf "%*s%s%s%s%s%s%s%s$/", 
+              6, "",
+              color("[ ",                                         $theme{symbol}),
+              color(sprintf("%*d", $width, $wsize),               $theme{detail}),
+              color(" / ",                                        $theme{symbol}),
+              color(sprintf("%*d", $width, $rsize),               $theme{detail}),
+              color(" ] ( ",                                      $theme{symbol}),
+              color(sprintf("%6.2f%%", $wsize / $rsize * 100.0),  $theme{detail}),
+              color(" )",                                         $theme{symbol});
           }
         }
       }
@@ -1301,7 +1310,7 @@ sub show_progress ($$$$$$$)
   my $cr = $bw / $bt;      # completion ratio  
   my $pr = int($cr * 100); # percent complete
 
-  printf $fh "\r%s", status($tw, $cr, $pr);
+  printf $fh "\r%s\r", status($tw, $cr, $pr);
 
   # STDOUT gets closed after flush, so we need to reopen it for our caller
   select \*STDOUT if defined $termsz;
@@ -1462,7 +1471,7 @@ __END__
 
 =over 4
 
-=item B<pcp> -- Copy files and directories with progress indicators, checksum validations, and some other stuff
+=item B<pcp> - Copy files and directories with progress indicators, checksum validations, and some other stuff
 
 =back
 
